@@ -17,7 +17,8 @@ import numpy as np
 import pandas as pd
 import joblib
 from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier, VotingClassifier
+from sklearn.ensemble import VotingClassifier
+from catboost import CatBoostClassifier
 from sklearn.metrics import (
     classification_report, confusion_matrix, roc_auc_score,
     average_precision_score, f1_score, precision_score, recall_score, roc_curve
@@ -40,6 +41,8 @@ def build_models_optimized(class_weight: float = 1.5) -> dict:
     """
     Build models with optimized hyperparameters for minority class.
     class_weight: higher = more weight to positive (mule) class.
+    CatBoost replaces Random Forest — better accuracy on tabular data,
+    native categorical handling, and faster inference.
     """
     # Calculate scale_pos_weight for XGBoost and LightGBM
     pos_weight = class_weight
@@ -77,16 +80,17 @@ def build_models_optimized(class_weight: float = 1.5) -> dict:
             n_jobs=-1,
             verbose=-1
         ),
-        'random_forest': RandomForestClassifier(
-            n_estimators=300,  # Increased from 200
-            max_depth=8,  # Reduced from 10
-            min_samples_split=5,
-            min_samples_leaf=2,
-            class_weight='balanced',  # Use balanced weights
-            random_state=42,
-            n_jobs=-1,
-            bootstrap=True,
-            oob_score=True  # For out-of-bag estimation
+        'catboost': CatBoostClassifier(
+            iterations=300,
+            depth=6,
+            learning_rate=0.03,
+            scale_pos_weight=pos_weight,  # Handles class imbalance
+            eval_metric='AUC',
+            od_type='Iter',              # Overfitting detector
+            od_wait=30,                  # Early stopping rounds
+            random_seed=42,
+            thread_count=-1,
+            verbose=0                    # Silent training
         ),
     }
 
@@ -204,7 +208,7 @@ def train_pipeline_optimized(data_path: str):
         estimators=[
             ('xgb', trained['xgboost']),
             ('lgbm', trained['lightgbm']),
-            ('rf', trained['random_forest']),
+            ('catboost', trained['catboost']),
         ],
         voting='soft',
         weights=[3, 2, 1]  # XGBoost gets highest weight
@@ -227,7 +231,7 @@ def train_pipeline_optimized(data_path: str):
     joblib.dump(best_threshold, os.path.join(ARTIFACTS_DIR, 'best_threshold.pkl'))
     joblib.dump(trained['xgboost'], os.path.join(ARTIFACTS_DIR, 'xgboost.pkl'))
     joblib.dump(trained['lightgbm'], os.path.join(ARTIFACTS_DIR, 'lightgbm.pkl'))
-    joblib.dump(trained['random_forest'], os.path.join(ARTIFACTS_DIR, 'random_forest.pkl'))
+    joblib.dump(trained['catboost'], os.path.join(ARTIFACTS_DIR, 'catboost.pkl'))
     joblib.dump(ensemble, os.path.join(ARTIFACTS_DIR, 'ensemble.pkl'))
     print(f"  Artifacts saved → {ARTIFACTS_DIR}/")
 

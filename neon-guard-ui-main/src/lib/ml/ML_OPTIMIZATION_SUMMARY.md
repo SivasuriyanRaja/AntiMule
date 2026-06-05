@@ -14,8 +14,10 @@ Optimized ML models integrated into neon-guard-ui for mule account detection wit
   - Handles 0.89% mule prevalence more effectively
   - Default class_weight=1.5 can be tuned per dataset
   
-- ✅ **Explicit class_weight='balanced'** for Random Forest
-  - Automatically scales weights inversely proportional to class frequency
+- ✅ **CatBoostClassifier with scale_pos_weight** replaces Random Forest
+  - Native handling of categorical features (no encoding needed)
+  - Built-in overfitting detector (od_type='Iter', od_wait=30)
+  - scale_pos_weight handles 0.89% mule prevalence like XGBoost/LightGBM
 
 #### Hyperparameter Tuning
 | Parameter | Change | Benefit |
@@ -96,6 +98,7 @@ df[col] = df[col].astype(str).apply(
 | Component | Change | Impact |
 |-----------|--------|--------|
 | Ensemble weights | [2,2,1] → [3,2,1] | Emphasizes best-performing XGBoost |
+| Third model | Random Forest → **CatBoost** | Better accuracy, native categoricals, faster inference |
 | Voting strategy | soft | Uses probabilities, not binary votes |
 | Decision threshold | 0.5 → calibrated | Per-model optimal threshold |
 | Anomaly blending | 15% → 20% | Higher weight for outlier detection |
@@ -123,9 +126,9 @@ Optimized (Ensemble, optimized threshold):
 ```
 src/lib/ml/
 ├── preprocess_optimized.py  - Feature engineering
-├── train_optimized.py       - Model training (run once)
+├── train_optimized.py       - Model training (XGBoost + LightGBM + CatBoost ensemble)
 ├── inference_optimized.py   - Real-time predictions
-└── requirements.txt         - Dependencies
+└── requirements.txt         - Dependencies (includes catboost>=1.2.0)
 ```
 
 ### Quick Start
