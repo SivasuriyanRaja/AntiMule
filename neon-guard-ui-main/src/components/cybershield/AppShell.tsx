@@ -57,11 +57,11 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="mt-auto glass rounded-xl p-3 text-xs text-muted-foreground">
-          <div className="flex items-center gap-2 text-foreground">
-            <span className="h-2 w-2 rounded-full bg-success anim-pulse-soft" />
-            All systems nominal
+          <div className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-muted-foreground" />
+            No model loaded
           </div>
-          <div className="mt-1">Model v4.2 · uptime 99.98%</div>
+          <div className="mt-1">Train a model to get started</div>
         </div>
       </aside>
 
@@ -98,10 +98,10 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Settings className="h-4 w-4" />
             </button>
             <div className="hidden sm:flex items-center gap-2 pl-3 ml-1 border-l border-border">
-              <div className="h-8 w-8 rounded-full gradient-primary grid place-items-center text-xs font-semibold">AM</div>
+              <div className="h-8 w-8 rounded-full gradient-primary grid place-items-center text-xs font-semibold">U</div>
               <div className="text-xs leading-tight">
-                <div className="font-medium">Ada Mensah</div>
-                <div className="text-muted-foreground">Senior Analyst</div>
+                <div className="font-medium">User</div>
+                <div className="text-muted-foreground">Analyst</div>
               </div>
             </div>
           </div>
