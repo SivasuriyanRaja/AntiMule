@@ -1,8 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/cybershield/AppShell";
-import { Btn, GlassCard, Pill, SectionHeader } from "@/components/cybershield/primitives";
-import { CheckCircle2, FileUp, Play, Sparkles } from "lucide-react";
-import { useState } from "react";
+import { Btn, GlassCard, SectionHeader } from "@/components/cybershield/primitives";
+import { FileUp, Play, Settings2 } from "lucide-react";
 
 export const Route = createFileRoute("/train")({
   head: () => ({
@@ -14,19 +13,7 @@ export const Route = createFileRoute("/train")({
   component: Train,
 });
 
-const logLines = [
-  "[12:04:01] Loading dataset transactions_2026q2.parquet (3.4 GB)…",
-  "[12:04:09] Feature engineering · 184 features generated",
-  "[12:04:22] Train/val split 80/20 · stratified by label",
-  "[12:04:31] Fitting XGBoost · early stopping = 50 rounds",
-  "[12:05:12] AUC 0.9871 · PR 0.942 · recall@0.5 = 0.91",
-  "[12:05:14] Calibrating probabilities (isotonic)…",
-  "[12:05:21] Saved artifact models/xgb-v4.3.bin",
-];
-
 function Train() {
-  const [progress, setProgress] = useState(72);
-
   return (
     <AppShell>
       <SectionHeader
@@ -36,7 +23,7 @@ function Train() {
       />
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        {/* Uploader */}
+        {/* Dataset uploader */}
         <GlassCard tone="info" className="p-6 xl:col-span-1">
           <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">Step 1</div>
           <h2 className="font-display text-lg font-semibold">Dataset</h2>
@@ -48,84 +35,52 @@ function Train() {
           </label>
 
           <div className="mt-4 space-y-2 text-xs">
-            <div className="flex justify-between"><span className="text-muted-foreground">File</span><span className="font-mono">transactions_2026q2.parquet</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Rows</span><span className="tabular-nums">12,480,991</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Label balance</span><span>97.8% / 2.2%</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">File</span><span className="font-mono text-muted-foreground">No file selected</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Rows</span><span className="text-muted-foreground">—</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Label balance</span><span className="text-muted-foreground">—</span></div>
           </div>
 
           <div className="mt-6 flex gap-2">
-            <Btn className="flex-1"><Play className="h-4 w-4" />Start training</Btn>
-            <Btn variant="secondary">Configure</Btn>
+            <Btn className="flex-1" disabled><Play className="h-4 w-4" />Start training</Btn>
+            <Btn variant="secondary"><Settings2 className="h-4 w-4" />Configure</Btn>
           </div>
         </GlassCard>
 
-        {/* Progress */}
+        {/* Training progress — empty state */}
         <GlassCard className="p-6 xl:col-span-2">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Step 2 · in progress</div>
-              <h2 className="font-display text-lg font-semibold">Training run #1284</h2>
-            </div>
-            <Pill tone="info">XGBoost · v4.3-rc</Pill>
-          </div>
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Step 2 · waiting</div>
+          <h2 className="font-display text-lg font-semibold mt-0.5">Training run</h2>
 
           <div className="mt-5">
             <div className="flex justify-between text-xs mb-2">
-              <span className="text-muted-foreground">Round 412 / 600</span>
-              <span className="tabular-nums">{progress}%</span>
+              <span className="text-muted-foreground">No active run</span>
+              <span className="tabular-nums text-muted-foreground">0%</span>
             </div>
             <div className="h-2 rounded-full bg-surface-2 overflow-hidden">
-              <div
-                className="h-full gradient-primary shadow-glow transition-all duration-500"
-                style={{ width: `${progress}%` }}
-              />
+              <div className="h-full gradient-primary transition-all duration-500" style={{ width: "0%" }} />
             </div>
-            <div className="mt-1 text-[11px] text-muted-foreground">ETA ~ 2m 14s</div>
+            <div className="mt-1 text-[11px] text-muted-foreground">Upload a dataset to begin</div>
           </div>
 
           <div className="mt-5 rounded-lg bg-background/70 border border-border font-mono text-[12px] leading-relaxed p-4 max-h-56 overflow-auto">
-            {logLines.map((l, i) => (
-              <div key={i} className="text-muted-foreground">
-                <span className="text-primary">›</span> {l}
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-3 flex gap-2">
-            <Btn variant="secondary" size="sm" onClick={() => setProgress((p) => Math.min(100, p + 7))}>Simulate progress</Btn>
-            <Btn variant="ghost" size="sm">Pause</Btn>
+            <div className="text-muted-foreground italic">Training logs will appear here…</div>
           </div>
         </GlassCard>
 
-        {/* Best model */}
-        <GlassCard tone="success" className="p-6 xl:col-span-3">
+        {/* Best model — empty state */}
+        <GlassCard className="p-6 xl:col-span-3">
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="h-11 w-11 rounded-xl bg-success/15 text-success grid place-items-center">
-                <CheckCircle2 className="h-5 w-5" />
-              </div>
-              <div>
-                <div className="text-[11px] uppercase tracking-wider text-success">Best candidate</div>
-                <h3 className="font-display text-lg font-semibold">xgb-v4.3-rc · ready to promote</h3>
-              </div>
-              <Pill tone="info"><Sparkles className="h-3 w-3" /> +1.4% recall</Pill>
-            </div>
-            <div className="flex gap-2">
-              <Btn variant="secondary">Compare to v4.2</Btn>
-              <Btn>Promote to production</Btn>
+            <div>
+              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Best candidate</div>
+              <h3 className="font-display text-lg font-semibold text-muted-foreground">No model trained yet</h3>
             </div>
           </div>
 
           <div className="mt-5 grid grid-cols-2 md:grid-cols-4 gap-3">
-            {[
-              ["AUC-ROC", "0.9871"],
-              ["PR-AUC", "0.942"],
-              ["Recall @ 0.5", "0.91"],
-              ["Precision @ 0.5", "0.95"],
-            ].map(([k, v]) => (
+            {["AUC-ROC", "PR-AUC", "Recall @ 0.5", "Precision @ 0.5"].map((k) => (
               <div key={k} className="rounded-lg bg-surface-2/60 border border-border/60 p-3">
                 <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{k}</div>
-                <div className="font-display text-xl font-semibold tabular-nums">{v}</div>
+                <div className="font-display text-xl font-semibold tabular-nums text-muted-foreground">—</div>
               </div>
             ))}
           </div>
