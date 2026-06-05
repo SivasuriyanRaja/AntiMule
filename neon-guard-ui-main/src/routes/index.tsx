@@ -9,7 +9,7 @@ import {
 import { Brain, UserSearch, BarChart2, ShieldOff, Activity } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
-export const Route = createFileRoute("/")(({
+export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Overview · CyberShield" },
@@ -17,7 +17,7 @@ export const Route = createFileRoute("/")(({
     ],
   }),
   component: Overview,
-}));
+});
 
 function Overview() {
   return (
