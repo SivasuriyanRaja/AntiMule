@@ -8,7 +8,7 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  AntiMule Dev Server Starting..." -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "  Backend  -> http://localhost:8000" -ForegroundColor Green
+Write-Host "  Backend  -> http://localhost:8005" -ForegroundColor Green
 Write-Host "  Frontend -> http://localhost:8080" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "  Press Ctrl+C to stop both servers" -ForegroundColor Gray
@@ -18,8 +18,8 @@ Write-Host ""
 # Start Backend in a NEW visible terminal window so errors are easy to see
 $backendScript = @"
 Set-Location '$ROOT'
-Write-Host '[BACKEND] Starting FastAPI on http://localhost:8000...' -ForegroundColor Green
-& '$ROOT\.venv\Scripts\uvicorn.exe' main:app --host 0.0.0.0 --port 8000
+Write-Host '[BACKEND] Starting FastAPI on http://localhost:8005...' -ForegroundColor Green
+& '$ROOT\.venv\Scripts\uvicorn.exe' main:app --host 0.0.0.0 --port 8005
 Write-Host '[BACKEND] Server stopped.' -ForegroundColor Red
 Read-Host 'Press Enter to close'
 "@
