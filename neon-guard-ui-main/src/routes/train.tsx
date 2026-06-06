@@ -1,68 +1,109 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/cybershield/AppShell";
 import { Btn, GlassCard, SectionHeader } from "@/components/cybershield/primitives";
-import { FileUp, Play, CheckCircle2, XCircle } from "lucide-react";
-import { useState, useRef } from "react";
+import { FileUp, Play, CheckCircle2, XCircle, AlertCircle, Cpu } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
 
 export const Route = createFileRoute("/train")({
   component: Train,
 });
 
+const API_BASE = "http://localhost:8000";
+
 function formatSize(bytes: number) {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+}
+
+interface TrainMetrics {
+  best_model: string;
+  auc: string;
+  avg_precision: string;
+  recall: string;
+  precision: string;
 }
 
 function Train() {
-  const [fileName, setFileName] = useState("");
-  const [fileSize, setFileSize] = useState("");
-  const [columns, setColumns] = useState<string[]>([]);
-  const [rowEst, setRowEst] = useState(0);
-  const [fileError, setFileError] = useState("");
-  const [isDragging, setIsDragging] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [logs, setLogs] = useState<string[]>([]);
-  const [progress, setProgress] = useState(0);
-  const [running, setRunning] = useState(false);
-  const [done, setDone] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [file, setFile]               = useState<File | null>(null);
+  const [fileName, setFileName]       = useState("");
+  const [fileSize, setFileSize]       = useState("");
+  const [columns, setColumns]         = useState<string[]>([]);
+  const [rowEst, setRowEst]           = useState(0);
+  const [fileError, setFileError]     = useState("");
+  const [isDragging, setIsDragging]   = useState(false);
+  const [parsing, setParsing]         = useState(false);
 
-  function processFile(file: File) {
-    setLoading(true);
+  const [logs, setLogs]               = useState<string[]>([]);
+  const [progress, setProgress]       = useState(0);
+  const [running, setRunning]         = useState(false);
+  const [done, setDone]               = useState(false);
+  const [trainError, setTrainError]   = useState("");
+  const [metrics, setMetrics]         = useState<TrainMetrics | null>(null);
+  const [backendOk, setBackendOk]     = useState<boolean | null>(null);
+
+  const inputRef  = useRef<HTMLInputElement>(null);
+  const logEndRef = useRef<HTMLDivElement>(null);
+
+  // ── Check backend health on mount ──────────────────────────────────────────
+  useEffect(() => {
+    fetch(`${API_BASE}/health`)
+      .then((r) => setBackendOk(r.ok))
+      .catch(() => setBackendOk(false));
+  }, []);
+
+  // ── Auto-scroll logs ────────────────────────────────────────────────────────
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [logs]);
+
+  // ── File processing ─────────────────────────────────────────────────────────
+  function processFile(f: File) {
+    setParsing(true);
     setFileError("");
     setColumns([]);
     setRowEst(0);
     setDone(false);
     setLogs([]);
     setProgress(0);
-    setFileName(file.name);
-    setFileSize(formatSize(file.size));
+    setMetrics(null);
+    setTrainError("");
+    setFileName(f.name);
+    setFileSize(formatSize(f.size));
+    setFile(f);
 
-    if (!file.name.match(/\.(csv|tsv|txt)$/i)) {
-      setFileError("Parquet accepted — pass to Python backend to train.");
-      setLoading(false);
+    if (!f.name.match(/\.(csv|tsv|txt)$/i)) {
+      setFileError("Only CSV/TSV files are supported for browser upload.");
+      setParsing(false);
       return;
     }
 
-    const blob = file.slice(0, 65536); // read first 64 KB only
+    const blob = f.slice(0, 65536);
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
         const text = String(e.target?.result ?? "");
         const lines = text.split(/\r?\n/).filter((l) => l.trim());
-        const cols = lines[0] ? lines[0].split(",").map((c) => c.trim().replace(/^"|"$/g, "")) : [];
+        const cols  = lines[0]
+          ? lines[0].split(",").map((c) => c.trim().replace(/^"|"$/g, ""))
+          : [];
         const sample = lines.slice(1, 20);
-        const avgLen = sample.length ? sample.reduce((s, l) => s + l.length + 1, 0) / sample.length : 60;
-        const est = Math.max(0, Math.round((file.size - (lines[0]?.length ?? 0)) / avgLen));
+        const avgLen = sample.length
+          ? sample.reduce((s, l) => s + l.length + 1, 0) / sample.length
+          : 60;
+        const est = Math.max(0, Math.round((f.size - (lines[0]?.length ?? 0)) / avgLen));
         setColumns(cols);
         setRowEst(est);
-        if (cols.length === 0) setFileError("No columns found — check the file has a header row.");
+        if (cols.length === 0)
+          setFileError("No columns found — check the file has a header row.");
       } catch {
-        setFileError("Could not parse file.");
+        setFileError("Could not parse file headers.");
       }
-      setLoading(false);
+      setParsing(false);
     };
-    reader.onerror = () => { setFileError("Failed to read file."); setLoading(false); };
+    reader.onerror = () => {
+      setFileError("Failed to read file.");
+      setParsing(false);
+    };
     reader.readAsText(blob);
   }
 
@@ -78,36 +119,104 @@ function Train() {
     if (f) processFile(f);
   }
 
-  function startTraining() {
-    if (!fileName || fileError) return;
+  // ── Training via real backend SSE ───────────────────────────────────────────
+  async function startTraining() {
+    if (!file || fileError || running) return;
+
     setRunning(true);
     setDone(false);
-    setProgress(0);
-    setLogs([]);
-    const steps = [
-      `[INFO] Loading: ${fileName} (${fileSize})`,
-      `[INFO] ~${rowEst.toLocaleString()} rows · ${columns.length} columns`,
-      "[INFO] Feature engineering…",
-      "[INFO] Train/val split 80/20 stratified",
-      "[INFO] Fitting XGBoost (n=500, lr=0.03)…",
-      "[INFO] Fitting LightGBM (n=500)…",
-      "[INFO] Fitting CatBoost (iter=300, depth=6)…",
-      "[INFO] Building Weighted Ensemble [3,2,1]…",
-      "[INFO] Calibrating probabilities…",
-      "[SUCCESS] Training complete. Model saved.",
+    setTrainError("");
+    setLogs([`[INFO] Uploading ${fileName} (${fileSize}) to backend…`]);
+    setProgress(2);
+    setMetrics(null);
+
+    // Estimate progress from known pipeline step keywords
+    const STEP_KEYWORDS: [string, number][] = [
+      ["STEP 1",  10], ["STEP 2",  20], ["STEP 3",  30],
+      ["STEP 4",  40], ["STEP 5",  50], ["STEP 6",  60],
+      ["STEP 7",  70], ["STEP 8",  85], ["STEP 9",  95],
+      ["RESULT",  98], ["DONE",   100],
     ];
-    let i = 0;
-    const iv = setInterval(() => {
-      if (i < steps.length) {
-        setLogs((p) => [...p, steps[i]]);
-        setProgress(Math.round(((i + 1) / steps.length) * 100));
-        i++;
-      } else {
-        clearInterval(iv);
-        setRunning(false);
-        setDone(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch(`${API_BASE}/train`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Backend error ${response.status}: ${text}`);
       }
-    }, 900);
+
+      const reader  = response.body!.getReader();
+      const decoder = new TextDecoder();
+      let   buffer  = "";
+
+      while (true) {
+        const { value, done: streamDone } = await reader.read();
+        if (streamDone) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() ?? "";
+
+        for (const part of parts) {
+          const line = part.replace(/^data:\s*/, "").trim();
+          if (!line) continue;
+          try {
+            const msg = JSON.parse(line) as { log: string; done?: boolean };
+
+            setLogs((prev) => [...prev, msg.log]);
+
+            // Update progress from step keywords
+            for (const [kw, pct] of STEP_KEYWORDS) {
+              if (msg.log.includes(kw)) {
+                setProgress(pct);
+                break;
+              }
+            }
+
+            // Parse metrics from [RESULT] line
+            if (msg.log.startsWith("[RESULT]")) {
+              const m: Record<string, string> = {};
+              for (const pair of msg.log.replace("[RESULT] ", "").split(" ")) {
+                const [k, v] = pair.split("=");
+                if (k && v) m[k] = v;
+              }
+              setMetrics({
+                best_model:    m.best_model    ?? "—",
+                auc:           m.auc           ?? "—",
+                avg_precision: m.avg_precision ?? "—",
+                recall:        m.recall        ?? "—",
+                precision:     m.precision     ?? "—",
+              });
+            }
+
+            if (msg.log.includes("[ERROR]")) {
+              setTrainError(msg.log.replace("[ERROR]", "").trim());
+            }
+
+            if (msg.done) {
+              setProgress(100);
+              setRunning(false);
+              setDone(true);
+              return;
+            }
+          } catch {
+            // malformed SSE chunk — skip
+          }
+        }
+      }
+    } catch (err: any) {
+      setTrainError(err.message ?? "Unknown error");
+      setLogs((prev) => [...prev, `[ERROR] ${err.message}`]);
+    } finally {
+      setRunning(false);
+    }
   }
 
   const hasFile = !!fileName && !fileError;
@@ -117,10 +226,30 @@ function Train() {
       <SectionHeader
         eyebrow="Workspace"
         title="Train a new model"
-        subtitle="Drop in a labeled dataset, choose the algorithm, and we'll handle the heavy lifting."
+        subtitle="Upload your labeled dataset — the backend will train XGBoost, LightGBM and CatBoost and pick the best ensemble automatically."
       />
 
+      {/* Backend status banner */}
+      {backendOk === false && (
+        <div className="mb-4 flex items-center gap-3 rounded-xl border border-coral/40 bg-coral/5 px-4 py-3 text-sm text-coral">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <span>
+            <strong>Backend offline</strong> — make sure the Python server is running on{" "}
+            <code className="font-mono text-xs">localhost:8000</code>. Run{" "}
+            <code className="font-mono text-xs">npm run dev</code> from the project root.
+          </span>
+        </div>
+      )}
+      {backendOk === true && (
+        <div className="mb-4 flex items-center gap-2 rounded-xl border border-success/30 bg-success/5 px-4 py-2.5 text-xs text-success">
+          <Cpu className="h-3.5 w-3.5" />
+          Backend connected · <code className="font-mono">localhost:8000</code>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+
+        {/* ── Step 1: Dataset upload ─────────────────────────────────────── */}
         <GlassCard tone="info" className="p-6 xl:col-span-1">
           <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">Step 1</div>
           <h2 className="font-display text-lg font-semibold">Dataset</h2>
@@ -131,14 +260,14 @@ function Train() {
             onDragLeave={() => setIsDragging(false)}
             onClick={() => inputRef.current?.click()}
             className={`mt-4 rounded-xl border-2 border-dashed transition-all cursor-pointer p-8 text-center select-none ${
-              isDragging ? "border-primary bg-primary/15"
-              : hasFile ? "border-success/50 bg-success/5"
-              : fileError ? "border-coral/40 bg-coral/5"
+              isDragging   ? "border-primary bg-primary/15"
+              : hasFile    ? "border-success/50 bg-success/5"
+              : fileError  ? "border-coral/40 bg-coral/5"
               : "border-primary/40 bg-primary/5 hover:bg-primary/10"
             }`}
           >
-            {loading ? (
-              <><div className="h-8 w-8 mx-auto rounded-full border-2 border-primary border-t-transparent animate-spin" /><div className="mt-3 text-sm text-muted-foreground">Reading…</div></>
+            {parsing ? (
+              <><div className="h-8 w-8 mx-auto rounded-full border-2 border-primary border-t-transparent animate-spin" /><div className="mt-3 text-sm text-muted-foreground">Reading headers…</div></>
             ) : hasFile ? (
               <><CheckCircle2 className="h-8 w-8 mx-auto text-success" /><div className="mt-2 text-sm font-medium truncate">{fileName}</div><div className="text-xs text-muted-foreground mt-1">{fileSize} · click to change</div></>
             ) : fileError ? (
@@ -146,7 +275,11 @@ function Train() {
             ) : (
               <><FileUp className="h-8 w-8 mx-auto text-primary" /><div className="mt-3 text-sm font-medium">Drop CSV here</div><div className="text-xs text-muted-foreground mt-1">or click to browse · any size</div></>
             )}
-            <input ref={inputRef} type="file" accept=".csv,.tsv,.txt,.parquet" className="sr-only" aria-label="Upload dataset" onChange={handleChange} />
+            <input
+              ref={inputRef} type="file" accept=".csv,.tsv,.txt"
+              className="sr-only" aria-label="Upload dataset"
+              onChange={handleChange}
+            />
           </div>
 
           <div className="mt-4 space-y-2 text-xs">
@@ -169,54 +302,124 @@ function Train() {
           )}
 
           <div className="mt-6 flex gap-2">
-            <Btn className="flex-1" disabled={!hasFile || running} onClick={startTraining}>
-              <Play className="h-4 w-4" />{running ? "Training…" : "Start training"}
+            <Btn
+              className="flex-1"
+              disabled={!hasFile || running || backendOk === false}
+              onClick={startTraining}
+            >
+              <Play className="h-4 w-4" />
+              {running ? "Training…" : "Start training"}
             </Btn>
           </div>
+
+          {backendOk === false && (
+            <p className="mt-2 text-[11px] text-coral text-center">
+              Start the backend first
+            </p>
+          )}
         </GlassCard>
 
+        {/* ── Step 2: Training run ────────────────────────────────────────── */}
         <GlassCard className="p-6 xl:col-span-2">
           <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-            {running ? "Step 2 · in progress" : done ? "Step 2 · complete" : "Step 2 · waiting"}
+            {running ? "Step 2 · training in progress" : done ? "Step 2 · complete ✓" : "Step 2 · waiting"}
           </div>
           <h2 className="font-display text-lg font-semibold mt-0.5">Training run</h2>
+
+          {/* Progress bar */}
           <div className="mt-5">
             <div className="flex justify-between text-xs mb-2">
-              <span className="text-muted-foreground">{done ? "Training complete ✓" : running ? "In progress…" : "No active run"}</span>
+              <span className="text-muted-foreground">
+                {done ? "Training complete ✓" : running ? "In progress — do not close this tab…" : "No active run"}
+              </span>
               <span className="tabular-nums">{progress}%</span>
             </div>
             <div className="h-2 rounded-full bg-surface-2 overflow-hidden">
-              <div className={`h-full transition-all duration-700 ${done ? "bg-success" : "gradient-primary shadow-glow"}`} style={{ width: `${progress}%` }} />
+              <div
+                className={`h-full transition-all duration-700 ${done ? "bg-success" : trainError ? "bg-coral" : "gradient-primary shadow-glow"}`}
+                style={{ width: `${progress}%` }}
+              />
             </div>
-            <div className="mt-1 text-[11px] text-muted-foreground">{!hasFile ? "Upload a dataset to begin" : done ? "Ready to promote" : running ? "Please wait…" : "Click Start training"}</div>
+            <div className="mt-1 text-[11px] text-muted-foreground">
+              {!hasFile ? "Upload a dataset to begin"
+                : trainError ? "Training failed — see logs below"
+                : done ? "Model saved — ready to use"
+                : running ? "Processing on the Python backend…"
+                : "Click Start training"}
+            </div>
           </div>
-          <div className="mt-5 rounded-lg bg-background/70 border border-border font-mono text-[12px] leading-relaxed p-4 max-h-56 overflow-auto">
+
+          {/* Log terminal */}
+          <div className="mt-5 rounded-lg bg-background/70 border border-border font-mono text-[12px] leading-relaxed p-4 h-56 overflow-auto">
             {logs.length === 0
-              ? <div className="text-muted-foreground italic">Training logs will appear here…</div>
+              ? <div className="text-muted-foreground italic">Training logs will stream here in real-time…</div>
               : logs.map((l, i) => (
-                <div key={i} className={l.startsWith("[SUCCESS]") ? "text-success" : "text-muted-foreground"}>
-                  <span className="text-primary">›</span> {l}
-                </div>
-              ))}
+                  <div
+                    key={i}
+                    className={
+                      l.includes("[SUCCESS]") || l.includes("[DONE]") || l.includes("[RESULT]")
+                        ? "text-success"
+                        : l.includes("[ERROR]")
+                        ? "text-coral"
+                        : l.includes("[STEP") || l.includes("[INFO]")
+                        ? "text-muted-foreground"
+                        : "text-foreground/70"
+                    }
+                  >
+                    <span className="text-primary select-none">› </span>{l}
+                  </div>
+                ))}
+            <div ref={logEndRef} />
           </div>
         </GlassCard>
 
-        <GlassCard className={`p-6 xl:col-span-3 ${done ? "ring-1 ring-success/30" : ""}`}>
+        {/* ── Step 3: Results ──────────────────────────────────────────────── */}
+        <GlassCard className={`p-6 xl:col-span-3 ${done && !trainError ? "ring-1 ring-success/30" : ""}`}>
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              {done && <div className="h-11 w-11 rounded-xl bg-success/15 text-success grid place-items-center"><CheckCircle2 className="h-5 w-5" /></div>}
+              {done && !trainError && (
+                <div className="h-11 w-11 rounded-xl bg-success/15 text-success grid place-items-center">
+                  <CheckCircle2 className="h-5 w-5" />
+                </div>
+              )}
+              {trainError && (
+                <div className="h-11 w-11 rounded-xl bg-coral/15 text-coral grid place-items-center">
+                  <XCircle className="h-5 w-5" />
+                </div>
+              )}
               <div>
-                <div className={`text-[11px] uppercase tracking-wider ${done ? "text-success" : "text-muted-foreground"}`}>Best candidate</div>
-                <h3 className={`font-display text-lg font-semibold ${done ? "" : "text-muted-foreground"}`}>{done ? "Ensemble (XGB + LightGBM + CatBoost)" : "No model trained yet"}</h3>
+                <div className={`text-[11px] uppercase tracking-wider ${done && !trainError ? "text-success" : trainError ? "text-coral" : "text-muted-foreground"}`}>
+                  Best candidate
+                </div>
+                <h3 className={`font-display text-lg font-semibold ${done ? "" : "text-muted-foreground"}`}>
+                  {trainError
+                    ? "Training failed"
+                    : metrics
+                    ? metrics.best_model
+                    : done
+                    ? "Model trained successfully"
+                    : "No model trained yet"}
+                </h3>
               </div>
             </div>
-            {done && <div className="flex gap-2"><Btn variant="secondary">Compare</Btn><Btn>Promote to production</Btn></div>}
+            {done && !trainError && (
+              <div className="flex gap-2">
+                <Btn variant="secondary">Compare</Btn>
+                <Btn>Promote to production</Btn>
+              </div>
+            )}
           </div>
+
           <div className="mt-5 grid grid-cols-2 md:grid-cols-4 gap-3">
-            {[["AUC-ROC", done ? "~0.987" : "—"], ["PR-AUC", done ? "~0.942" : "—"], ["Recall @ 0.5", done ? "~0.91" : "—"], ["Precision @ 0.5", done ? "~0.95" : "—"]].map(([k, v]) => (
+            {[
+              ["AUC-ROC",        metrics?.auc           ?? (done ? "—" : "—")],
+              ["Avg Precision",  metrics?.avg_precision  ?? (done ? "—" : "—")],
+              ["Recall",         metrics?.recall         ?? (done ? "—" : "—")],
+              ["Precision",      metrics?.precision      ?? (done ? "—" : "—")],
+            ].map(([k, v]) => (
               <div key={k} className="rounded-lg bg-surface-2/60 border border-border/60 p-3">
                 <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{k}</div>
-                <div className={`font-display text-xl font-semibold ${v === "—" ? "text-muted-foreground" : ""}`}>{v}</div>
+                <div className={`font-display text-xl font-semibold tabular-nums ${v === "—" ? "text-muted-foreground" : "text-success"}`}>{v}</div>
               </div>
             ))}
           </div>

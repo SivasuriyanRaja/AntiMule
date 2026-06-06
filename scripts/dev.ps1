@@ -25,7 +25,7 @@ Write-Host '[BACKEND] Starting FastAPI on http://localhost:8000...' -ForegroundC
 $backendJob = Start-Job -ScriptBlock {
     param($root)
     Set-Location $root
-    & "$root\.venv\Scripts\uvicorn.exe" "neon-guard-ui-main.src.lib.ml.api_wrapper:app" `
+    & "$root\.venv\Scripts\uvicorn.exe" "main:app" `
         --host 0.0.0.0 --port 8000 --reload
 } -ArgumentList $ROOT
 
