@@ -62,7 +62,6 @@ def build_models_optimized(class_weight: float = 1.5) -> dict:
             reg_lambda=1.0,  # L2 regularization
             random_state=42,
             n_jobs=-1,
-            early_stopping_rounds=10,
             eval_metric='aucpr'  # Optimize for average precision (better for imbalanced)
         ),
         'lightgbm': LGBMClassifier(
@@ -86,8 +85,6 @@ def build_models_optimized(class_weight: float = 1.5) -> dict:
             learning_rate=0.03,
             scale_pos_weight=pos_weight,  # Handles class imbalance
             eval_metric='AUC',
-            od_type='Iter',              # Overfitting detector
-            od_wait=30,                  # Early stopping rounds
             random_seed=42,
             thread_count=-1,
             verbose=0                    # Silent training
