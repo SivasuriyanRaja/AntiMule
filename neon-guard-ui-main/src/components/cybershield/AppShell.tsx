@@ -21,7 +21,7 @@ const nav = [
 ] as const;
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const path = useRouterState({ select: (s) => s.location.pathname });
+  const path = useRouterState({ select: (s) => s.location?.pathname ?? "/" });
 
   return (
     <div className="min-h-dvh flex">
@@ -37,7 +37,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <nav className="flex flex-col gap-1 mt-2" aria-label="Primary">
           {nav.map(({ to, label, icon: Icon }) => {
-            const active = to === "/" ? path === "/" : path.startsWith(to);
+            const active = to === "/" ? path === "/" : (path?.startsWith(to) ?? false);
             return (
               <Link
                 key={to}

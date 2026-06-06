@@ -4,12 +4,6 @@ import { Btn, GlassCard, SectionHeader } from "@/components/cybershield/primitiv
 import { ScanSearch, Workflow } from "lucide-react";
 
 export const Route = createFileRoute("/score")({
-  head: () => ({
-    meta: [
-      { title: "Single Account Score · CyberShield" },
-      { name: "description", content: "Score an individual account and inspect SHAP-based explanations and rules." },
-    ],
-  }),
   component: Score,
 });
 

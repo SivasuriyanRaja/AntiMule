@@ -6,12 +6,6 @@ import { useState, useRef } from "react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip, Bar, BarChart, XAxis, YAxis, CartesianGrid } from "recharts";
 
 export const Route = createFileRoute("/batch")({
-  head: () => ({
-    meta: [
-      { title: "Batch Scoring · CyberShield" },
-      { name: "description", content: "Score thousands of accounts at once." },
-    ],
-  }),
   component: Batch,
 });
 

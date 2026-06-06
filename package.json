@@ -1,0 +1,9 @@
+{
+  "name": "antimule",
+  "private": true,
+  "scripts": {
+    "dev": "powershell -ExecutionPolicy Bypass -File ./scripts/dev.ps1",
+    "frontend": "cd neon-guard-ui-main && npm run dev",
+    "backend": ".venv\\Scripts\\uvicorn neon-guard-ui-main/src/lib/ml/api_wrapper:app --host 0.0.0.0 --port 8000 --reload"
+  }
+}

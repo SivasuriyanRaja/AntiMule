@@ -5,12 +5,6 @@ import { FileUp, Play, CheckCircle2, XCircle } from "lucide-react";
 import { useState, useRef } from "react";
 
 export const Route = createFileRoute("/train")({
-  head: () => ({
-    meta: [
-      { title: "Train Model · CyberShield" },
-      { name: "description", content: "Upload training data and train a new fraud detection model." },
-    ],
-  }),
   component: Train,
 });
 

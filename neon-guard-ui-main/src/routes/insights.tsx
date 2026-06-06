@@ -5,12 +5,6 @@ import { useState } from "react";
 import { BarChart2, LineChart, FlaskConical, GitCompare } from "lucide-react";
 
 export const Route = createFileRoute("/insights")({
-  head: () => ({
-    meta: [
-      { title: "Model Insights · CyberShield" },
-      { name: "description", content: "Compare models, inspect feature importance, and watch temporal performance." },
-    ],
-  }),
   component: Insights,
 });
 
