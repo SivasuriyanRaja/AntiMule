@@ -15,16 +15,13 @@ Write-Host "  Press Ctrl+C to stop both servers" -ForegroundColor Gray
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
-# Start Backend in a NEW visible terminal window so errors are easy to see
-$backendScript = @"
-Set-Location '$ROOT'
+# Start Backend silently as a background job
 Write-Host '[BACKEND] Starting FastAPI on http://localhost:8005...' -ForegroundColor Green
-& '$ROOT\.venv\Scripts\uvicorn.exe' main:app --host 0.0.0.0 --port 8005
-Write-Host '[BACKEND] Server stopped.' -ForegroundColor Red
-Read-Host 'Press Enter to close'
-"@
-
-Start-Process powershell -ArgumentList "-NoExit", "-Command", $backendScript
+$backendJob = Start-Job -ScriptBlock {
+    param($root)
+    Set-Location $root
+    & "$root\.venv\Scripts\uvicorn.exe" main:app --host 0.0.0.0 --port 8005
+} -ArgumentList $ROOT
 
 # Give backend 3 seconds to start before launching frontend
 Start-Sleep -Seconds 3
@@ -36,5 +33,8 @@ try {
     npm run dev -- --force
 } finally {
     Write-Host ""
-    Write-Host "Frontend stopped. Close the backend window manually." -ForegroundColor Red
+    Write-Host "Stopping backend server..." -ForegroundColor Red
+    Stop-Job $backendJob -PassThru | Remove-Job -Force
+    Get-Process -Name "uvicorn" -ErrorAction SilentlyContinue | Stop-Process -Force
+    Write-Host "Both servers stopped." -ForegroundColor Green
 }
