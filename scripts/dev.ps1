@@ -19,7 +19,7 @@ Write-Host ""
 $backendScript = @"
 Set-Location '$ROOT'
 Write-Host '[BACKEND] Starting FastAPI on http://localhost:8000...' -ForegroundColor Green
-& '$ROOT\.venv\Scripts\uvicorn.exe' main:app --host 0.0.0.0 --port 8000 --reload --reload-exclude '*models*' --reload-exclude '*reports*'
+& '$ROOT\.venv\Scripts\uvicorn.exe' main:app --host 0.0.0.0 --port 8000
 Write-Host '[BACKEND] Server stopped.' -ForegroundColor Red
 Read-Host 'Press Enter to close'
 "@
