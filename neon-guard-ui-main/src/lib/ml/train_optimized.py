@@ -174,7 +174,7 @@ def train_pipeline_optimized(data_path: str):
 
     print("\n[STEP 6] SMOTE oversampling...")
     smote = SMOTE(random_state=42, k_neighbors=3)  # Reduced k_neighbors for small minority
-    X_train_res, y_train_res = smote.fit_resample(X_train_s, y_train)
+    X_train_res, y_train_res = smote.fit_resample(X_train_s, y_train)  # type: ignore
     print(f"  After SMOTE: {dict(pd.Series(y_train_res).value_counts())}")
 
     print("\n[STEP 7] Training individual models with optimized params...")

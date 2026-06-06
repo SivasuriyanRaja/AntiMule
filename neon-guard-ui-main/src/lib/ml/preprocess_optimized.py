@@ -153,7 +153,7 @@ def transform_new_data(df: pd.DataFrame, artifacts_dir: str = 'models') -> np.nd
     return X_scaled
 
 
-def fit_isolation_forest(X_train: np.ndarray, artifacts_dir: str = 'models', contamination: float = 0.01):
+def fit_isolation_forest(X_train: pd.DataFrame | np.ndarray, artifacts_dir: str = 'models', contamination: float = 0.01):
     """Fit Isolation Forest for anomaly detection."""
     os.makedirs(artifacts_dir, exist_ok=True)
     iso_forest = IsolationForest(contamination=contamination, random_state=42, n_jobs=-1)
