@@ -27,5 +27,13 @@ export default defineConfig({
   server: {
     host: "::",
     port: 8080,
+    watch: {
+      ignored: [
+        "**/src/lib/models/**", 
+        "**/src/lib/reports/**", 
+        "**/*.pkl", 
+        "**/*.csv"
+      ]
+    }
   },
 });
