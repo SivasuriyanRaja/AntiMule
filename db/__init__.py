@@ -14,9 +14,9 @@ Usage anywhere in the project:
     stats = db.get_stats()
 
 Set DB_BACKEND in .env:
-    "mongodb" → MongoDB only
-    "mysql"   → MySQL only
-    "both"    → writes to both, reads from MongoDB
+    "mongodb" -> MongoDB only
+    "mysql"   -> MySQL only
+    "both"    -> writes to both, reads from MongoDB
 """
 
 import os, asyncio
@@ -38,7 +38,7 @@ class _Router:
             try:
                 from db import mongo as _m
                 self._mongo = _m
-                print(f"[DB] MongoDB ready  → {_m.MONGO_URI}/{_m.MONGO_DB}")
+                print(f"[DB] MongoDB ready  -> {_m.MONGO_URI}/{_m.MONGO_DB}")
             except Exception as e:
                 print(f"[DB] MongoDB init failed: {e}")
 
@@ -47,7 +47,7 @@ class _Router:
                 from db import mysql as _s
                 _s.create_tables()
                 self._mysql = _s
-                print(f"[DB] MySQL ready    → {_s.MYSQL_HOST}/{_s.MYSQL_DB}")
+                print(f"[DB] MySQL ready    -> {_s.MYSQL_HOST}/{_s.MYSQL_DB}")
             except Exception as e:
                 print(f"[DB] MySQL init failed: {e}")
 

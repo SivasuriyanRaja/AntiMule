@@ -6,8 +6,8 @@ Collections:
   alerts        — auto-generated high-risk alerts
   model_metrics — training metrics history
 
-Motor  → async (FastAPI endpoints)
-PyMongo → sync  (scripts, health checks)
+Motor  -> async (FastAPI endpoints)
+PyMongo -> sync  (scripts, health checks)
 """
 
 import os
