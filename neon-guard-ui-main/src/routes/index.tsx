@@ -32,8 +32,31 @@ interface ModelMetrics {
 function Overview() {
   const [features, setFeatures] = useState<FeatureImportance[]>([]);
   const [bestModel, setBestModel] = useState<ModelMetrics | null>(null);
+  const [stats, setStats] = useState<any>(null);
+  const [alerts, setAlerts] = useState<any[]>([]);
+  const [recent, setRecent] = useState<any[]>([]);
 
   useEffect(() => {
+    const token = localStorage.getItem("auth_token");
+    const headers = token ? { "Authorization": `Bearer ${token}` } : {};
+
+    // Fetch DB Stats
+    fetch(`${API_BASE}/db/stats`, { headers })
+      .then(r => r.json())
+      .then(data => { if (data.available) setStats(data); })
+      .catch(() => {});
+
+    // Fetch Alerts
+    fetch(`${API_BASE}/db/alerts?limit=5`, { headers })
+      .then(r => r.json())
+      .then(data => { if (data.alerts) setAlerts(data.alerts); })
+      .catch(() => {});
+
+    // Fetch Recent Activity
+    fetch(`${API_BASE}/db/recent?limit=5`, { headers })
+      .then(r => r.json())
+      .then(data => { if (data.predictions) setRecent(data.predictions); })
+      .catch(() => {});
     // Fetch feature importances
     fetch(`${API_BASE}/model/feature-importance`)
       .then((r) => r.json())
@@ -72,34 +95,53 @@ function Overview() {
         }
       />
 
-      {/* KPI row — empty */}
+      {/* KPI row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <MetricTile label="Transactions scored" value="—" tone="info" />
-        <MetricTile label="Suspicious flagged" value="—" tone="warning" />
-        <MetricTile label="Confirmed mule" value="—" tone="critical" />
+        <MetricTile label="Transactions scored" value={stats?.total_predictions ?? "—"} tone="info" />
+        <MetricTile label="Suspicious flagged" value={stats?.open_alerts ?? "—"} tone="warning" />
+        <MetricTile label="Confirmed mule" value={stats?.mule_count ?? "—"} tone="critical" />
         <MetricTile label="Model precision" value={bestModel ? `${(bestModel.precision * 100).toFixed(1)}%` : "—"} tone="success" />
       </div>
 
       {/* Body grid */}
       <div className="mt-6 grid grid-cols-1 xl:grid-cols-3 gap-4">
-        {/* Recent alerts — empty state */}
+        {/* Recent alerts */}
         <GlassCard className="xl:col-span-2 p-5">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="font-display text-lg font-semibold">Recent alerts</h2>
-              <p className="text-xs text-muted-foreground">Alerts will appear here as accounts are scored</p>
+              <p className="text-xs text-muted-foreground">High-risk accounts requiring review</p>
             </div>
           </div>
-          <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
-            <div className="h-14 w-14 rounded-2xl bg-surface-2 grid place-items-center">
-              <ShieldOff className="h-7 w-7 text-muted-foreground" />
+          {alerts.length > 0 ? (
+            <div className="space-y-2">
+              {alerts.map((a, i) => (
+                <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-surface-2/40 border border-border/40">
+                  <div className="flex items-center gap-3">
+                    <div className="h-8 w-8 rounded bg-coral/10 text-coral flex items-center justify-center">
+                      <ShieldOff className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">Risk Score: {a.risk_score}</p>
+                      <p className="text-xs text-muted-foreground">{new Date(a.created_at).toLocaleString()}</p>
+                    </div>
+                  </div>
+                  <Btn variant="secondary" size="sm">Review</Btn>
+                </div>
+              ))}
             </div>
-            <p className="text-sm font-medium text-muted-foreground">No alerts yet</p>
-            <p className="text-xs text-muted-foreground max-w-xs">
-              Score an individual account or run a batch to start generating alerts.
-            </p>
-            <Link to="/score"><Btn variant="secondary" size="sm">Score an account</Btn></Link>
-          </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
+              <div className="h-14 w-14 rounded-2xl bg-surface-2 grid place-items-center">
+                <ShieldOff className="h-7 w-7 text-muted-foreground" />
+              </div>
+              <p className="text-sm font-medium text-muted-foreground">No alerts yet</p>
+              <p className="text-xs text-muted-foreground max-w-xs">
+                Score an individual account or run a batch to start generating alerts.
+              </p>
+              <Link to="/score"><Btn variant="secondary" size="sm">Score an account</Btn></Link>
+            </div>
+          )}
         </GlassCard>
 
         {/* Feature importance */}
@@ -145,16 +187,33 @@ function Overview() {
         </GlassCard>
       </div>
 
-      {/* Activity feed — empty state */}
+      {/* Activity feed */}
       <div className="mt-4">
         <GlassCard className="p-5">
           <div className="flex items-center gap-3 mb-4">
             <Activity className="h-4 w-4 text-muted-foreground" />
             <h2 className="font-display text-base font-semibold">Recent activity</h2>
           </div>
-          <div className="flex flex-col items-center justify-center py-8 gap-2 text-center">
-            <p className="text-sm text-muted-foreground">No activity recorded yet.</p>
-          </div>
+          {recent.length > 0 ? (
+            <div className="space-y-2">
+              {recent.map((r, i) => (
+                <div key={i} className="flex items-center justify-between p-3 rounded-lg hover:bg-surface-2/30 transition-colors">
+                  <div className="flex items-center gap-4">
+                    <div className="h-2 w-2 rounded-full" style={{ backgroundColor: r.risk_tier === 'high' ? 'var(--color-coral)' : r.risk_tier === 'med' ? 'var(--color-gold)' : 'var(--color-success)' }} />
+                    <p className="text-sm">Account scored from {r.source.toUpperCase()}</p>
+                  </div>
+                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                    <span>Score: {r.risk_score}</span>
+                    <span>{new Date(r.created_at).toLocaleString()}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-8 gap-2 text-center">
+              <p className="text-sm text-muted-foreground">No activity recorded yet.</p>
+            </div>
+          )}
         </GlassCard>
       </div>
     </AppShell>
