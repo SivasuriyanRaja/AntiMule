@@ -144,13 +144,24 @@ def impute_and_scale(X_train, X_test=None, artifacts_dir='models'):
 
 
 def transform_new_data(df: pd.DataFrame, artifacts_dir: str = 'models') -> np.ndarray:
-    """Transform new data using saved artifacts (vectorized)."""
+    """Transform new data using saved artifacts (vectorized). Handles partial inputs by aligning columns."""
     imputer = joblib.load(os.path.join(artifacts_dir, 'imputer.pkl'))
     scaler = joblib.load(os.path.join(artifacts_dir, 'scaler.pkl'))
+    feature_cols = joblib.load(os.path.join(artifacts_dir, 'feature_cols.pkl'))
     
-    X_imp = imputer.transform(df.select_dtypes(include=[np.number]))
+    # Align dataframe columns to training features, filling missing with NaN
+    aligned_df = pd.DataFrame(index=df.index, columns=feature_cols)
+    for col in feature_cols:
+        if col in df.columns:
+            aligned_df[col] = pd.to_numeric(df[col], errors='coerce')
+        else:
+            aligned_df[col] = np.nan
+            
+    X_imp = imputer.transform(aligned_df[feature_cols])
     X_scaled = scaler.transform(X_imp)
-    return X_scaled
+    
+    # Return as DataFrame if model requires feature names
+    return pd.DataFrame(X_scaled, columns=feature_cols)
 
 
 def fit_isolation_forest(X_train: pd.DataFrame | np.ndarray, artifacts_dir: str = 'models', contamination: float = 0.01):

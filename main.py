@@ -125,6 +125,11 @@ async def train(file: UploadFile = File(...)):
                         log_q.put("[DB] Training metrics saved to database.")
                     except Exception as _dbe:
                         log_q.put(f"[DB] Metrics save skipped: {_dbe}")
+                
+                # Clear singleton cache to reload the newly trained model on next predict
+                if hasattr(get_detector, '_instance'):
+                    delattr(get_detector, '_instance')
+                    log_q.put("[INFO] Model cache cleared. Next prediction will load the new model.")
             except Exception:
                 log_q.put(f"[ERROR] {traceback.format_exc()}")
             finally:
