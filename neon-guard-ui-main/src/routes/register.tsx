@@ -30,8 +30,7 @@ function Register() {
     try {
       const res = await fetch("http://localhost:8005/auth/register", {
         method: "POST",
-        headers: { 'Authorization': Bearer ,
- "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, email, password }),
       });
       const data = await res.json();
