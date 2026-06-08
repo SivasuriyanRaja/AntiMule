@@ -34,26 +34,24 @@ class _Router:
         self._init()
 
     def _init(self):
-        if self.backend in ("mongodb", "both"):
-            try:
-                from db import mongo as _m
-                self._mongo = _m
-                print(f"[DB] MongoDB ready  -> {_m.MONGO_URI}/{_m.MONGO_DB}")
-            except Exception as e:
-                print(f"[DB] MongoDB init failed: {e}")
+        try:
+            from db import mongo as _m
+            self._mongo = _m
+            print(f"[DB] MongoDB ready  -> {_m.MONGO_URI}/{_m.MONGO_DB}")
+        except Exception as e:
+            print(f"[DB] MongoDB init failed: {e}")
 
-        if self.backend in ("mysql", "both"):
-            try:
-                from db import mysql as _s
-                _s.create_tables()
-                self._mysql = _s
-                print(f"[DB] MySQL ready    -> {_s.MYSQL_HOST}/{_s.MYSQL_DB}")
-            except Exception as e:
-                print(f"[DB] MySQL init failed: {e}")
+        try:
+            from db import mysql as _s
+            _s.create_tables()
+            self._mysql = _s
+            print(f"[DB] MySQL ready    -> {_s.MYSQL_HOST}/{_s.MYSQL_DB}")
+        except Exception as e:
+            print(f"[DB] MySQL init failed: {e}")
 
     # ── Status ─────────────────────────────────────────────────────────────
     def status(self) -> dict:
-        out = {"backend": self.backend}
+        out = {"backend": "mixed (Users -> MySQL, ML -> Mongo)"}
         if self._mongo:
             out["mongodb"] = self._mongo.ping()
         if self._mysql:
@@ -62,89 +60,57 @@ class _Router:
 
     # ── Save prediction (async) ─────────────────────────────────────────────
     async def async_save_prediction(self, account_data: dict, result: dict,
-                                    source: str = "api") -> dict:
+                                    source: str = "api", user_id = None) -> dict:
         ids = {}
         if self._mongo:
             try:
                 ids["mongo_id"] = await self._mongo.async_save_prediction(
-                    account_data, result, source
+                    account_data, result, source, user_id
                 )
             except Exception as e:
                 ids["mongo_error"] = str(e)
-        if self._mysql:
-            try:
-                loop = asyncio.get_event_loop()
-                ids["mysql_id"] = await loop.run_in_executor(
-                    None, lambda: self._mysql.save_prediction(account_data, result, source)
-                )
-            except Exception as e:
-                ids["mysql_error"] = str(e)
         return ids
 
     # ── Save prediction (sync) ──────────────────────────────────────────────
     def save_prediction(self, account_data: dict, result: dict,
-                        source: str = "api") -> dict:
+                        source: str = "api", user_id = None) -> dict:
         ids = {}
         if self._mongo:
             try:
                 ids["mongo_id"] = self._mongo.sync_save_prediction(
-                    account_data, result, source
+                    account_data, result, source, user_id
                 )
             except Exception as e:
                 ids["mongo_error"] = str(e)
-        if self._mysql:
-            try:
-                ids["mysql_id"] = self._mysql.save_prediction(account_data, result, source)
-            except Exception as e:
-                ids["mysql_error"] = str(e)
         return ids
 
     # ── Save batch (async) ──────────────────────────────────────────────────
     async def async_save_batch(self, scan_id: str, accounts: list,
-                               results: list, source: str = "api") -> dict:
+                               results: list, source: str = "api", user_id = None) -> dict:
         ids = {}
         if self._mongo:
             try:
                 ids["mongo_id"] = await self._mongo.async_save_batch(
-                    scan_id, accounts, results, source
+                    scan_id, accounts, results, source, user_id
                 )
             except Exception as e:
                 ids["mongo_error"] = str(e)
-        if self._mysql:
-            try:
-                loop = asyncio.get_event_loop()
-                ids["mysql_id"] = await loop.run_in_executor(
-                    None, lambda: self._mysql.save_batch(scan_id, accounts, results, source)
-                )
-            except Exception as e:
-                ids["mysql_error"] = str(e)
         return ids
 
     # ── Stats (async) ───────────────────────────────────────────────────────
-    async def async_get_stats(self) -> dict:
+    async def async_get_stats(self, user_id = None) -> dict:
         if self._mongo:
             try:
-                return await self._mongo.async_get_stats()
-            except Exception:
-                pass
-        if self._mysql:
-            try:
-                loop = asyncio.get_event_loop()
-                return await loop.run_in_executor(None, self._mysql.get_stats)
+                return await self._mongo.async_get_stats(user_id)
             except Exception:
                 pass
         return {}
 
     # ── Stats (sync) ────────────────────────────────────────────────────────
-    def get_stats(self) -> dict:
+    def get_stats(self, user_id = None) -> dict:
         if self._mongo:
             try:
                 return self._mongo.sync_get_stats()
-            except Exception:
-                pass
-        if self._mysql:
-            try:
-                return self._mysql.get_stats()
             except Exception:
                 pass
         return {}
@@ -156,14 +122,6 @@ class _Router:
                 return await self._mongo.async_get_recent(limit, user_id)
             except Exception:
                 pass
-        if self._mysql:
-            try:
-                loop = asyncio.get_event_loop()
-                return await loop.run_in_executor(
-                    None, lambda: self._mysql.get_recent_predictions(limit, user_id)
-                )
-            except Exception:
-                pass
         return []
 
     # ── Alerts (async) ──────────────────────────────────────────────────────
@@ -171,14 +129,6 @@ class _Router:
         if self._mongo:
             try:
                 return await self._mongo.async_get_alerts(limit)
-            except Exception:
-                pass
-        if self._mysql:
-            try:
-                loop = asyncio.get_event_loop()
-                return await loop.run_in_executor(
-                    None, lambda: self._mysql.get_alerts(limit)
-                )
             except Exception:
                 pass
         return []
@@ -191,14 +141,6 @@ class _Router:
                 ids["mongo_id"] = await self._mongo.async_save_model_metrics(metrics)
             except Exception as e:
                 ids["mongo_error"] = str(e)
-        if self._mysql:
-            try:
-                loop = asyncio.get_event_loop()
-                ids["mysql_id"] = await loop.run_in_executor(
-                    None, lambda: self._mysql.save_model_metrics(metrics)
-                )
-            except Exception as e:
-                ids["mysql_error"] = str(e)
         return ids
 
 
@@ -206,26 +148,17 @@ class _Router:
     # -- Users (async) -------------------------------------------------------
     async def async_create_user(self, email: str, password_hash: str) -> dict:
         user = None
-        if self._mongo:
-            try:
-                user = await self._mongo.async_create_user(email, password_hash)
-            except Exception as e:
-                if not self._mysql: raise e
         if self._mysql:
             try:
                 loop = asyncio.get_event_loop()
                 user = await loop.run_in_executor(None, self._mysql.create_user, email, password_hash)
             except Exception as e:
                 if not user: raise e
+        else:
+            raise Exception("MySQL is required for User authentication but it is not initialized.")
         return user
 
     async def async_get_user_by_email(self, email: str) -> dict:
-        if self._mongo:
-            try:
-                user = await self._mongo.async_get_user_by_email(email)
-                if user: return user
-            except Exception:
-                pass
         if self._mysql:
             try:
                 loop = asyncio.get_event_loop()
@@ -233,6 +166,8 @@ class _Router:
                 if user: return user
             except Exception:
                 pass
+        else:
+            raise Exception("MySQL is required for User authentication but it is not initialized.")
         return None
 
 
