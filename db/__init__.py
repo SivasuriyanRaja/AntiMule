@@ -202,5 +202,39 @@ class _Router:
         return ids
 
 
+
+    # -- Users (async) -------------------------------------------------------
+    async def async_create_user(self, email: str, password_hash: str) -> dict:
+        user = None
+        if self._mongo:
+            try:
+                user = await self._mongo.async_create_user(email, password_hash)
+            except Exception as e:
+                if not self._mysql: raise e
+        if self._mysql:
+            try:
+                loop = asyncio.get_event_loop()
+                user = await loop.run_in_executor(None, self._mysql.create_user, email, password_hash)
+            except Exception as e:
+                if not user: raise e
+        return user
+
+    async def async_get_user_by_email(self, email: str) -> dict:
+        if self._mongo:
+            try:
+                user = await self._mongo.async_get_user_by_email(email)
+                if user: return user
+            except Exception:
+                pass
+        if self._mysql:
+            try:
+                loop = asyncio.get_event_loop()
+                user = await loop.run_in_executor(None, self._mysql.get_user_by_email, email)
+                if user: return user
+            except Exception:
+                pass
+        return None
+
+
 # Singleton — import this everywhere
 db = _Router(BACKEND)

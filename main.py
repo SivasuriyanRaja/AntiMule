@@ -305,3 +305,50 @@ async def model_feature_importance():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8005, reload=True)
+
+# -- Auth Endpoints ------------------------------------------------------------
+import jwt
+import bcrypt
+
+from datetime import datetime, timedelta, timezone
+
+
+JWT_SECRET = 'your-super-secret-key-please-change-in-prod'
+JWT_ALGORITHM = 'HS256'
+JWT_EXPIRATION_HOURS = 24
+
+class UserCreate(BaseModel):
+    email: str
+    password: str
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+@app.post('/auth/register')
+async def register(user: UserCreate):
+    if not _DB_AVAILABLE:
+        raise HTTPException(status_code=500, detail='Database unavailable')
+    pass_hash = bcrypt.hashpw(user.password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    try:
+        new_user = await _db.async_create_user(user.email, pass_hash)
+        return {'status': 'success', 'user': {'id': new_user['id'], 'email': new_user['email']}}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post('/auth/login')
+async def login(user: UserLogin):
+    if not _DB_AVAILABLE:
+        raise HTTPException(status_code=500, detail='Database unavailable')
+    db_user = await _db.async_get_user_by_email(user.email)
+    if not db_user or not bcrypt.checkpw(user.password.encode('utf-8'), db_user['password_hash'].encode('utf-8')):
+        raise HTTPException(status_code=401, detail='Invalid email or password')
+    
+    payload = {
+        'sub': str(db_user['id']),
+        'email': db_user['email'],
+        'exp': datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRATION_HOURS)
+    }
+    token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    return {'status': 'success', 'token': token, 'user': {'id': db_user['id'], 'email': db_user['email']}}
+

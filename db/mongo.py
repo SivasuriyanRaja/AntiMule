@@ -228,3 +228,38 @@ def ensure_indexes():
     db.batch_scans.create_index([("scan_id", 1)], unique=True)
     db.batch_scans.create_index([("created_at", DESCENDING)])
     print("[MongoDB] Indexes created.")
+
+async def async_create_user(email: str, password_hash: str) -> dict:
+    db = get_async_db()
+    doc = {'email': email, 'password_hash': password_hash, 'created_at': datetime.now(timezone.utc).isoformat()}
+    try:
+        res = await db.users.insert_one(doc)
+        doc['id'] = str(res.inserted_id)
+        return doc
+    except Exception as e:
+        raise ValueError(f'User with email {email} already exists or db error: {e}')
+
+async def async_get_user_by_email(email: str) -> dict:
+    db = get_async_db()
+    doc = await db.users.find_one({'email': email})
+    if doc:
+        doc['id'] = str(doc.pop('_id'))
+    return doc
+
+def create_user(email: str, password_hash: str) -> dict:
+    db = get_sync_db()
+    doc = {'email': email, 'password_hash': password_hash, 'created_at': datetime.now(timezone.utc).isoformat()}
+    try:
+        res = db.users.insert_one(doc)
+        doc['id'] = str(res.inserted_id)
+        return doc
+    except Exception as e:
+        raise ValueError(f'User with email {email} already exists or db error: {e}')
+
+def get_user_by_email(email: str) -> dict:
+    db = get_sync_db()
+    doc = db.users.find_one({'email': email})
+    if doc:
+        doc['id'] = str(doc.pop('_id'))
+    return doc
+

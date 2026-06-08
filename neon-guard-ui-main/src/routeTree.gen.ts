@@ -11,6 +11,8 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TrainRouteImport } from './routes/train'
 import { Route as ScoreRouteImport } from './routes/score'
+import { Route as RegisterRouteImport } from './routes/register'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as InsightsRouteImport } from './routes/insights'
 import { Route as BatchRouteImport } from './routes/batch'
 import { Route as IndexRouteImport } from './routes/index'
@@ -23,6 +25,16 @@ const TrainRoute = TrainRouteImport.update({
 const ScoreRoute = ScoreRouteImport.update({
   id: '/score',
   path: '/score',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RegisterRoute = RegisterRouteImport.update({
+  id: '/register',
+  path: '/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const InsightsRoute = InsightsRouteImport.update({
@@ -45,6 +57,8 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/batch': typeof BatchRoute
   '/insights': typeof InsightsRoute
+  '/login': typeof LoginRoute
+  '/register': typeof RegisterRoute
   '/score': typeof ScoreRoute
   '/train': typeof TrainRoute
 }
@@ -52,6 +66,8 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/batch': typeof BatchRoute
   '/insights': typeof InsightsRoute
+  '/login': typeof LoginRoute
+  '/register': typeof RegisterRoute
   '/score': typeof ScoreRoute
   '/train': typeof TrainRoute
 }
@@ -60,21 +76,47 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/batch': typeof BatchRoute
   '/insights': typeof InsightsRoute
+  '/login': typeof LoginRoute
+  '/register': typeof RegisterRoute
   '/score': typeof ScoreRoute
   '/train': typeof TrainRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/batch' | '/insights' | '/score' | '/train'
+  fullPaths:
+    | '/'
+    | '/batch'
+    | '/insights'
+    | '/login'
+    | '/register'
+    | '/score'
+    | '/train'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/batch' | '/insights' | '/score' | '/train'
-  id: '__root__' | '/' | '/batch' | '/insights' | '/score' | '/train'
+  to:
+    | '/'
+    | '/batch'
+    | '/insights'
+    | '/login'
+    | '/register'
+    | '/score'
+    | '/train'
+  id:
+    | '__root__'
+    | '/'
+    | '/batch'
+    | '/insights'
+    | '/login'
+    | '/register'
+    | '/score'
+    | '/train'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   BatchRoute: typeof BatchRoute
   InsightsRoute: typeof InsightsRoute
+  LoginRoute: typeof LoginRoute
+  RegisterRoute: typeof RegisterRoute
   ScoreRoute: typeof ScoreRoute
   TrainRoute: typeof TrainRoute
 }
@@ -93,6 +135,20 @@ declare module '@tanstack/react-router' {
       path: '/score'
       fullPath: '/score'
       preLoaderRoute: typeof ScoreRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/register': {
+      id: '/register'
+      path: '/register'
+      fullPath: '/register'
+      preLoaderRoute: typeof RegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/insights': {
@@ -123,6 +179,8 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   BatchRoute: BatchRoute,
   InsightsRoute: InsightsRoute,
+  LoginRoute: LoginRoute,
+  RegisterRoute: RegisterRoute,
   ScoreRoute: ScoreRoute,
   TrainRoute: TrainRoute,
 }

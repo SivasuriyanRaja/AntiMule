@@ -71,6 +71,14 @@ def ping() -> bool:
 class Base(DeclarativeBase):
     pass
 
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    email = Column(String(255), nullable=False, unique=True)
+    password_hash = Column(String(255), nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
 
 class Prediction(Base):
     __tablename__ = "predictions"
@@ -323,3 +331,29 @@ def save_model_metrics(metrics: list) -> int:
         raise e
     finally:
         db.close()
+
+
+def create_user(email: str, password_hash: str) -> dict:
+    db = get_session()
+    try:
+        user = User(email=email, password_hash=password_hash)
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        return {'id': user.id, 'email': user.email, 'created_at': user.created_at.isoformat() if user.created_at else None}
+    except Exception as e:
+        db.rollback()
+        raise ValueError(f'User with email {email} already exists or db error: {e}')
+    finally:
+        db.close()
+
+def get_user_by_email(email: str) -> dict:
+    db = get_session()
+    try:
+        user = db.query(User).filter(User.email == email).first()
+        if user:
+            return {'id': user.id, 'email': user.email, 'password_hash': user.password_hash, 'created_at': user.created_at.isoformat() if user.created_at else None}
+        return None
+    finally:
+        db.close()
+
