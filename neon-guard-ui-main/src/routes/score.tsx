@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/antimule/AppShell";
 import { Btn, GlassCard, SectionHeader } from "@/components/antimule/primitives";
-import { ScanSearch, Workflow, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { ScanSearch, Workflow, Loader2, RotateCcw } from "lucide-react";
+import { useState, useEffect } from "react";
 
 export const Route = createFileRoute("/score")({
   component: Score,
@@ -20,9 +20,34 @@ const defaultFeatures = [
 ];
 
 function Score() {
-  const [inputs, setInputs] = useState<Record<string, string>>({});
+  const [inputs, setInputs] = useState<Record<string, string>>(() => {
+    const saved = localStorage.getItem("score_inputs");
+    return saved ? JSON.parse(saved) : {};
+  });
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<any>(() => {
+    const saved = localStorage.getItem("score_result");
+    return saved ? JSON.parse(saved) : null;
+  });
+
+  useEffect(() => {
+    localStorage.setItem("score_inputs", JSON.stringify(inputs));
+  }, [inputs]);
+
+  useEffect(() => {
+    if (result) {
+      localStorage.setItem("score_result", JSON.stringify(result));
+    } else {
+      localStorage.removeItem("score_result");
+    }
+  }, [result]);
+
+  const handleReset = () => {
+    setInputs({});
+    setResult(null);
+    localStorage.removeItem("score_inputs");
+    localStorage.removeItem("score_result");
+  };
 
   const handleScore = async () => {
     setLoading(true);
@@ -63,9 +88,12 @@ function Score() {
         subtitle="Fill in the account features on the left, then run the model to see the risk score."
         actions={
           <>
-            <Btn variant="secondary" disabled>Save case</Btn>
+            <Btn variant="secondary" onClick={handleReset} disabled={loading}>
+              <RotateCcw className="h-4 w-4 mr-2" />
+              Reset
+            </Btn>
             <Btn disabled={loading} onClick={handleScore}>
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanSearch className="h-4 w-4" />}
+              {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <ScanSearch className="h-4 w-4 mr-2" />}
               {loading ? "Scoring..." : "Run score"}
             </Btn>
           </>

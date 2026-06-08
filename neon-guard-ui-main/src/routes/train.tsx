@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/antimule/AppShell";
 import { Btn, GlassCard, SectionHeader } from "@/components/antimule/primitives";
 import { FileUp, Play, CheckCircle2, XCircle, AlertCircle, Cpu } from "lucide-react";
-import { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 
 export const Route = createFileRoute("/train")({
   component: Train,
@@ -25,21 +25,40 @@ interface TrainMetrics {
 
 function Train() {
   const [file, setFile]               = useState<File | null>(null);
-  const [fileName, setFileName]       = useState("");
-  const [fileSize, setFileSize]       = useState("");
-  const [columns, setColumns]         = useState<string[]>([]);
-  const [rowEst, setRowEst]           = useState(0);
+  const [fileName, setFileName]       = useState(() => localStorage.getItem("train_fileName") || "");
+  const [fileSize, setFileSize]       = useState(() => localStorage.getItem("train_fileSize") || "");
+  const [columns, setColumns]         = useState<string[]>(() => { const s = localStorage.getItem("train_columns"); return s ? JSON.parse(s) : []; });
+  const [rowEst, setRowEst]           = useState(() => { const s = localStorage.getItem("train_rowEst"); return s ? JSON.parse(s) : 0; });
   const [fileError, setFileError]     = useState("");
   const [isDragging, setIsDragging]   = useState(false);
   const [parsing, setParsing]         = useState(false);
 
-  const [logs, setLogs]               = useState<string[]>([]);
-  const [progress, setProgress]       = useState(0);
+  const [logs, setLogs]               = useState<string[]>(() => { const s = localStorage.getItem("train_logs"); return s ? JSON.parse(s) : []; });
+  const [progress, setProgress]       = useState(() => { const s = localStorage.getItem("train_progress"); return s ? JSON.parse(s) : 0; });
   const [running, setRunning]         = useState(false);
-  const [done, setDone]               = useState(false);
+  const [done, setDone]               = useState(() => { const s = localStorage.getItem("train_done"); return s ? JSON.parse(s) : false; });
   const [trainError, setTrainError]   = useState("");
-  const [metrics, setMetrics]         = useState<TrainMetrics | null>(null);
+  const [metrics, setMetrics]         = useState<TrainMetrics | null>(() => { const s = localStorage.getItem("train_metrics"); return s ? JSON.parse(s) : null; });
   const [backendOk, setBackendOk]     = useState<boolean | null>(null);
+
+  React.useEffect(() => {
+    localStorage.setItem("train_fileName", fileName);
+    localStorage.setItem("train_fileSize", fileSize);
+    localStorage.setItem("train_columns", JSON.stringify(columns));
+    localStorage.setItem("train_rowEst", JSON.stringify(rowEst));
+    localStorage.setItem("train_logs", JSON.stringify(logs));
+    localStorage.setItem("train_progress", JSON.stringify(progress));
+    localStorage.setItem("train_done", JSON.stringify(done));
+    if (metrics) localStorage.setItem("train_metrics", JSON.stringify(metrics));
+    else localStorage.removeItem("train_metrics");
+  }, [fileName, fileSize, columns, rowEst, logs, progress, done, metrics]);
+
+  function handleReset() {
+    setFileName(""); setFileSize(""); setColumns([]); setRowEst(0); setLogs([]); setProgress(0); setDone(false); setMetrics(null);
+    localStorage.removeItem("train_fileName"); localStorage.removeItem("train_fileSize"); localStorage.removeItem("train_columns");
+    localStorage.removeItem("train_rowEst"); localStorage.removeItem("train_logs"); localStorage.removeItem("train_progress");
+    localStorage.removeItem("train_done"); localStorage.removeItem("train_metrics");
+  }
 
   const inputRef  = useRef<HTMLInputElement>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
@@ -302,12 +321,9 @@ function Train() {
           )}
 
           <div className="mt-6 flex gap-2">
-            <Btn
-              className="flex-1"
-              disabled={!hasFile || running || backendOk === false}
-              onClick={startTraining}
-            >
-              <Play className="h-4 w-4" />
+            <Btn variant="secondary" onClick={handleReset} disabled={!fileName && !logs.length}>Reset</Btn>
+            <Btn className="flex-1" disabled={!hasFile || running || backendOk === false} onClick={startTraining}>
+              {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
               {running ? "Training…" : "Start training"}
             </Btn>
           </div>

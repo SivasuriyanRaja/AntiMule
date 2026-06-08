@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/antimule/AppShell";
 import { Btn, GlassCard, Pill, SectionHeader } from "@/components/antimule/primitives";
 import { Download, FileUp, Filter, CheckCircle2, XCircle, TableProperties } from "lucide-react";
-import { useState, useRef } from "react";
+import React, { useState, useRef } from "react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip, Bar, BarChart, XAxis, YAxis, CartesianGrid } from "recharts";
 
 export const Route = createFileRoute("/batch")({
@@ -25,16 +25,31 @@ function hashScore(values: string[], idx: number): number {
 }
 
 function Batch() {
-  const [headers, setHeaders] = useState<string[]>([]);
-  const [rows, setRows] = useState<string[][]>([]);
-  const [scores, setScores] = useState<number[]>([]);
-  const [fileName, setFileName] = useState("");
-  const [fileSize, setFileSize] = useState("");
-  const [totalEst, setTotalEst] = useState(0);
+  const [headers, setHeaders] = useState<string[]>(() => { const s = localStorage.getItem("batch_headers"); return s ? JSON.parse(s) : []; });
+  const [rows, setRows] = useState<string[][]>(() => { const s = localStorage.getItem("batch_rows"); return s ? JSON.parse(s) : []; });
+  const [scores, setScores] = useState<number[]>(() => { const s = localStorage.getItem("batch_scores"); return s ? JSON.parse(s) : []; });
+  const [fileName, setFileName] = useState(() => localStorage.getItem("batch_fileName") || "");
+  const [fileSize, setFileSize] = useState(() => localStorage.getItem("batch_fileSize") || "");
+  const [totalEst, setTotalEst] = useState(() => { const s = localStorage.getItem("batch_totalEst"); return s ? JSON.parse(s) : 0; });
   const [fileError, setFileError] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    localStorage.setItem("batch_headers", JSON.stringify(headers));
+    localStorage.setItem("batch_rows", JSON.stringify(rows));
+    localStorage.setItem("batch_scores", JSON.stringify(scores));
+    localStorage.setItem("batch_fileName", fileName);
+    localStorage.setItem("batch_fileSize", fileSize);
+    localStorage.setItem("batch_totalEst", JSON.stringify(totalEst));
+  }, [headers, rows, scores, fileName, fileSize, totalEst]);
+
+  function handleReset() {
+    setHeaders([]); setRows([]); setScores([]); setFileName(""); setFileSize(""); setTotalEst(0); setFileError("");
+    localStorage.removeItem("batch_headers"); localStorage.removeItem("batch_rows"); localStorage.removeItem("batch_scores");
+    localStorage.removeItem("batch_fileName"); localStorage.removeItem("batch_fileSize"); localStorage.removeItem("batch_totalEst");
+  }
 
   function processFile(file: File) {
     setLoading(true);
@@ -136,8 +151,8 @@ function Batch() {
         subtitle={hasData ? `${fileName} · ${fileSize} · showing top ${rows.length} rows` : "Upload a CSV file to score all accounts at once."}
         actions={
           <>
-            <Btn variant="secondary" disabled={!hasData}><Filter className="h-4 w-4" />Filters</Btn>
-            <Btn disabled={!hasData} onClick={exportCSV}><Download className="h-4 w-4" />Export CSV</Btn>
+            <Btn variant="secondary" onClick={handleReset} disabled={!hasData}>Reset</Btn>
+            <Btn disabled={!hasData} onClick={exportCSV}><Download className="h-4 w-4 mr-2" />Export CSV</Btn>
           </>
         }
       />
