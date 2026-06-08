@@ -8,8 +8,17 @@ CREATE DATABASE IF NOT EXISTS antimule
 
 USE antimule;
 
+CREATE TABLE IF NOT EXISTS users (
+  id INT NOT NULL AUTO_INCREMENT,
+  email VARCHAR(255) NOT NULL UNIQUE,
+  password_hash VARCHAR(255) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS predictions (
   id                    INT          NOT NULL AUTO_INCREMENT,
+  user_id               INT,
   f115                  FLOAT,
   f321                  FLOAT,
   f670                  FLOAT,
@@ -37,6 +46,7 @@ CREATE TABLE IF NOT EXISTS predictions (
 
 CREATE TABLE IF NOT EXISTS batch_scans (
   id              INT         NOT NULL AUTO_INCREMENT,
+  user_id         INT,
   scan_id         VARCHAR(36) NOT NULL UNIQUE,
   total           INT,
   mule_count      INT,
@@ -53,6 +63,7 @@ CREATE TABLE IF NOT EXISTS batch_scans (
 
 CREATE TABLE IF NOT EXISTS alerts (
   id             INT         NOT NULL AUTO_INCREMENT,
+  user_id        INT,
   prediction_id  INT,
   risk_score     INT,
   risk_tier      VARCHAR(10),
@@ -73,11 +84,3 @@ CREATE TABLE IF NOT EXISTS model_runs (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 SHOW TABLES;
-
-CREATE TABLE IF NOT EXISTS users (
-  id INT NOT NULL AUTO_INCREMENT,
-  email VARCHAR(255) NOT NULL UNIQUE,
-  password_hash VARCHAR(255) NOT NULL,
-  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

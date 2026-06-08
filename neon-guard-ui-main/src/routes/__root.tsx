@@ -66,7 +66,25 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   );
 }
 
+import { redirect } from "@tanstack/react-router";
+
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+  beforeLoad: ({ location }) => {
+    const isAuthenticated = !!localStorage.getItem("auth_token");
+    const isAuthRoute = location.pathname === "/login" || location.pathname === "/register";
+
+    if (!isAuthenticated && !isAuthRoute) {
+      throw redirect({
+        to: "/login",
+      });
+    }
+
+    if (isAuthenticated && isAuthRoute) {
+      throw redirect({
+        to: "/",
+      });
+    }
+  },
   component: RootComponent,
   notFoundComponent: NotFoundComponent,
   errorComponent: ErrorComponent,

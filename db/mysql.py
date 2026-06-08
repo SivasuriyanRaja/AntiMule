@@ -84,6 +84,7 @@ class Prediction(Base):
     __tablename__ = "predictions"
 
     id                    = Column(Integer, primary_key=True, autoincrement=True)
+    user_id               = Column(Integer, nullable=True)
     # Key account features stored for audit trail
     f115                  = Column(Float)
     f321                  = Column(Float)
@@ -110,6 +111,7 @@ class BatchScan(Base):
     __tablename__ = "batch_scans"
 
     id              = Column(Integer, primary_key=True, autoincrement=True)
+    user_id         = Column(Integer, nullable=True)
     scan_id         = Column(String(36), unique=True, nullable=False)
     total           = Column(Integer)
     mule_count      = Column(Integer)
@@ -125,6 +127,7 @@ class Alert(Base):
     __tablename__ = "alerts"
 
     id             = Column(Integer, primary_key=True, autoincrement=True)
+    user_id        = Column(Integer, nullable=True)
     prediction_id  = Column(Integer, index=True)
     risk_score     = Column(Integer)
     risk_tier      = Column(String(10))
@@ -246,7 +249,7 @@ def save_batch(scan_id: str, accounts: list,
         db.close()
 
 
-def get_recent_predictions(limit: int = 50) -> List[dict]:
+def get_recent_predictions(limit: int = 50, user_id: int = None) -> List[dict]:
     db = get_session()
     try:
         rows = (

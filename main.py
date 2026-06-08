@@ -160,7 +160,7 @@ class AccountData(BaseModel):
 
 
 @app.post("/predict")
-async def predict_single(account: AccountData):
+async def predict_single(account: AccountData, current_user: dict = Depends(get_current_user)):
     if not _ML_AVAILABLE:
         raise HTTPException(status_code=503, detail="ML modules not available")
     try:
@@ -169,7 +169,7 @@ async def predict_single(account: AccountData):
         # ── Persist to DB (non-blocking) ───────────────────────────────
         if _DB_AVAILABLE:
             try:
-                await _db.async_save_prediction(account.model_dump(), result, source="api")
+                await _db.async_save_prediction(account.model_dump(), result, source="api", user_id=current_user.get("sub"))
             except Exception:
                 pass
         return {"status": "success", "prediction": result}
@@ -179,7 +179,7 @@ async def predict_single(account: AccountData):
 
 # ── /predict/batch ────────────────────────────────────────────────────────────
 @app.post("/predict/batch")
-async def predict_batch(file: UploadFile = File(...)):
+async def predict_batch(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
     if not _ML_AVAILABLE:
         raise HTTPException(status_code=503, detail="ML modules not available")
     try:
@@ -198,7 +198,7 @@ async def predict_batch(file: UploadFile = File(...)):
             try:
                 accounts_list = df.to_dict(orient="records")
                 results_list  = results.to_dict(orient="records")
-                await _db.async_save_batch(scan_id, accounts_list, results_list, source="api")
+                await _db.async_save_batch(scan_id, accounts_list, results_list, source="api") # user_id will be added to batch_scans
             except Exception:
                 pass
 
@@ -228,24 +228,24 @@ async def db_status():
 
 
 @app.get("/db/stats")
-async def db_stats():
+async def db_stats(current_user: dict = Depends(get_current_user)):
     """Live prediction statistics from DB."""
     if not _DB_AVAILABLE:
         raise HTTPException(status_code=503, detail="DB not available")
     try:
-        stats = await _db.async_get_stats()
+        stats = await _db.async_get_stats(user_id=current_user.get("sub"))
         return stats
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/db/recent")
-async def db_recent(limit: int = Query(default=50, le=500)):
+async def db_recent(limit: int = Query(default=50, le=500), current_user: dict = Depends(get_current_user)):
     """Most recent predictions from DB."""
     if not _DB_AVAILABLE:
         raise HTTPException(status_code=503, detail="DB not available")
     try:
-        rows = await _db.async_get_recent(limit)
+        rows = await _db.async_get_recent(limit, user_id=current_user.get("sub"))
         for r in rows:
             if "created_at" in r and hasattr(r.get("created_at"), "isoformat"):
                 r["created_at"] = r["created_at"].isoformat()

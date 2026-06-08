@@ -129,7 +129,7 @@ async def async_save_batch(scan_id: str, accounts: list,
     return str(res.inserted_id)
 
 
-async def async_get_recent(limit: int = 50) -> list:
+async def async_get_recent(limit: int = 50, user_id: str = None) -> list:
     db     = get_async_db()
     cursor = db.predictions.find(
         {}, {"_id": 0, "account_data": 0}
@@ -137,7 +137,7 @@ async def async_get_recent(limit: int = 50) -> list:
     return await cursor.to_list(length=limit)
 
 
-async def async_get_stats() -> dict:
+async def async_get_stats(user_id: str = None) -> dict:
     db       = get_async_db()
     total    = await db.predictions.count_documents({})
     mules    = await db.predictions.count_documents({"prediction": 1})
@@ -190,7 +190,7 @@ def sync_save_prediction(account_data: dict, result: dict,
     return str(res.inserted_id)
 
 
-def sync_get_recent(limit: int = 50) -> list:
+def sync_get_recent(limit: int = 50, user_id: str = None) -> list:
     db = get_sync_db()
     return list(
         db.predictions.find(

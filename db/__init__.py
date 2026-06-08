@@ -150,17 +150,17 @@ class _Router:
         return {}
 
     # ── Recent predictions (async) ──────────────────────────────────────────
-    async def async_get_recent(self, limit: int = 50) -> list:
+    async def async_get_recent(self, limit: int = 50, user_id = None) -> list:
         if self._mongo:
             try:
-                return await self._mongo.async_get_recent(limit)
+                return await self._mongo.async_get_recent(limit, user_id)
             except Exception:
                 pass
         if self._mysql:
             try:
                 loop = asyncio.get_event_loop()
                 return await loop.run_in_executor(
-                    None, lambda: self._mysql.get_recent_predictions(limit)
+                    None, lambda: self._mysql.get_recent_predictions(limit, user_id)
                 )
             except Exception:
                 pass

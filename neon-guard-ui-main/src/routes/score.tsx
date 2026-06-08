@@ -36,7 +36,8 @@ function Score() {
       
       const res = await fetch("http://localhost:8005/predict", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 'Authorization': Bearer ,
+ "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
       const data = await res.json();
