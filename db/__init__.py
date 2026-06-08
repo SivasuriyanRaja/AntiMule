@@ -146,12 +146,12 @@ class _Router:
 
 
     # -- Users (async) -------------------------------------------------------
-    async def async_create_user(self, email: str, password_hash: str) -> dict:
+    async def async_create_user(self, email: str, password_hash: str, name: str = None) -> dict:
         user = None
         if self._mysql:
             try:
                 loop = asyncio.get_event_loop()
-                user = await loop.run_in_executor(None, self._mysql.create_user, email, password_hash)
+                user = await loop.run_in_executor(None, self._mysql.create_user, email, password_hash, name)
             except Exception as e:
                 if not user: raise e
         else:

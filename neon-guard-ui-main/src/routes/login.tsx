@@ -33,6 +33,7 @@ function Login() {
         // Store token and redirect
         localStorage.setItem("auth_token", data.token);
         localStorage.setItem("user_email", data.user.email);
+        localStorage.setItem("user_name", data.user.name || "");
         navigate({ to: "/" });
       } else {
         setError(data.detail || "Invalid credentials");

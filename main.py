@@ -336,6 +336,7 @@ JWT_EXPIRATION_HOURS = 24
 
 
 class UserCreate(BaseModel):
+    name: str
     email: str
     password: str
 
@@ -349,8 +350,8 @@ async def register(user: UserCreate):
         raise HTTPException(status_code=500, detail='Database unavailable')
     pass_hash = bcrypt.hashpw(user.password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
     try:
-        new_user = await _db.async_create_user(user.email, pass_hash)
-        return {'status': 'success', 'user': {'id': new_user['id'], 'email': new_user['email']}}
+        new_user = await _db.async_create_user(user.email, pass_hash, user.name)
+        return {'status': 'success', 'user': {'id': new_user['id'], 'email': new_user['email'], 'name': new_user.get('name')}}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -368,5 +369,5 @@ async def login(user: UserLogin):
         'exp': datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRATION_HOURS)
     }
     token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
-    return {'status': 'success', 'token': token, 'user': {'id': db_user['id'], 'email': db_user['email']}}
+    return {'status': 'success', 'token': token, 'user': {'id': db_user['id'], 'email': db_user['email'], 'name': db_user.get('name')}}
 

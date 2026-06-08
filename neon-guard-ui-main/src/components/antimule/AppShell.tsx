@@ -98,9 +98,11 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Settings className="h-4 w-4" />
             </button>
             <div className="hidden sm:flex items-center gap-2 pl-3 ml-1 border-l border-border">
-              <div className="h-8 w-8 rounded-full gradient-primary grid place-items-center text-xs font-semibold">U</div>
+              <div className="h-8 w-8 rounded-full gradient-primary grid place-items-center text-xs font-semibold">
+                {(localStorage.getItem("user_name") || "U")[0].toUpperCase()}
+              </div>
               <div className="text-xs leading-tight">
-                <div className="font-medium">User</div>
+                <div className="font-medium">{localStorage.getItem("user_name") || "User"}</div>
                 <div className="text-muted-foreground">Analyst</div>
               </div>
             </div>
