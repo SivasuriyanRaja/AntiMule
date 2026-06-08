@@ -317,6 +317,17 @@ JWT_SECRET = 'your-super-secret-key-please-change-in-prod'
 JWT_ALGORITHM = 'HS256'
 JWT_EXPIRATION_HOURS = 24
 
+from fastapi import Depends
+from fastapi.security import OAuth2PasswordBearer
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        return payload
+    except:
+        raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+
 class UserCreate(BaseModel):
     email: str
     password: str
