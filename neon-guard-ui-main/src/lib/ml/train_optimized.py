@@ -100,6 +100,10 @@ def evaluate_model(model, X_test, y_test, name: str, threshold: float = 0.5) -> 
     y_proba = model.predict_proba(X_test)[:, 1]
     y_pred = (y_proba >= threshold).astype(int)
     
+    tier_high = int(np.sum(y_proba >= 0.7))
+    tier_med  = int(np.sum((y_proba >= 0.4) & (y_proba < 0.7)))
+    tier_low  = int(np.sum(y_proba < 0.4))
+
     metrics = {
         'model': name,
         'threshold': threshold,
@@ -110,6 +114,7 @@ def evaluate_model(model, X_test, y_test, name: str, threshold: float = 0.5) -> 
         'recall': round(recall_score(y_test, y_pred, zero_division=0), 4),
         'confusion_matrix': confusion_matrix(y_test, y_pred).tolist(),
         'classification_report': classification_report(y_test, y_pred, output_dict=True, zero_division=0),
+        'tier_breakdown': {'high': tier_high, 'med': tier_med, 'low': tier_low}
     }
     
     print(f"\n{'='*60}\n  {name.upper()} (threshold={threshold})")

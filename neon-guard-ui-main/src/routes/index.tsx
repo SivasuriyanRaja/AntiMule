@@ -28,6 +28,7 @@ interface ModelMetrics {
   precision: number;
   recall: number;
   roc_auc: number;
+  tier_breakdown?: { high: number, med: number, low: number };
 }
 
 function Overview() {
@@ -37,12 +38,19 @@ function Overview() {
   const [alerts, setAlerts] = useState<any[]>([]);
   const [recent, setRecent] = useState<any[]>([]);
 
-  const tierBreakdown = stats?.tier_breakdown || {};
+  // Use live stats if available (>0 scored), otherwise fall back to the test set distribution from the trained model
+  const hasLiveStats = stats?.total_scored > 0;
+  const tierBreakdown = hasLiveStats ? (stats?.tier_breakdown || {}) : (bestModel?.tier_breakdown || {});
+  
   const distribution = [
     { name: "Legit", value: tierBreakdown.low || 0, color: "var(--color-success)" },
     { name: "Review", value: tierBreakdown.med || 0, color: "var(--color-gold)" },
     { name: "Mule", value: tierBreakdown.high || 0, color: "var(--color-coral)" },
   ].filter(d => d.value > 0);
+
+  const displaySubtitle = hasLiveStats 
+    ? "High-risk accounts requiring review" 
+    : "Showing risk distribution from latest model training set";
 
   useEffect(() => {
     const token = localStorage.getItem("auth_token");
@@ -118,7 +126,7 @@ function Overview() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="font-display text-lg font-semibold">Risk distribution & Alerts</h2>
-              <p className="text-xs text-muted-foreground">High-risk accounts requiring review</p>
+              <p className="text-xs text-muted-foreground">{displaySubtitle}</p>
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-1">
