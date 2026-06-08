@@ -271,12 +271,13 @@ async def db_recent(limit: int = Query(default=50, le=500), current_user: dict =
 
 
 @app.get("/db/alerts")
-async def db_alerts(limit: int = Query(default=20, le=100)):
+async def db_alerts(limit: int = Query(default=20, le=100), current_user: dict = Depends(get_current_user)):
     """Unacknowledged high-risk alerts."""
     if not _DB_AVAILABLE:
         raise HTTPException(status_code=503, detail="DB not available")
     try:
-        alerts = await _db.async_get_alerts(limit)
+        user_id = current_user.get("sub")
+        alerts = await _db.async_get_alerts(limit, user_id=user_id)
         for a in alerts:
             if "created_at" in a and hasattr(a.get("created_at"), "isoformat"):
                 a["created_at"] = a["created_at"].isoformat()

@@ -154,10 +154,12 @@ async def async_get_stats(user_id: str = None) -> dict:
     }
 
 
-async def async_get_alerts(limit: int = 20) -> list:
+async def async_get_alerts(limit: int = 20, user_id: str = None) -> list:
     db     = get_async_db()
+    query = {"acknowledged": False}
+    if user_id: query["user_id"] = str(user_id)
     cursor = db.alerts.find(
-        {"acknowledged": False}, {"_id": 0}
+        query, {"_id": 0}
     ).sort("created_at", -1).limit(limit)
     return await cursor.to_list(length=limit)
 

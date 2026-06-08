@@ -125,10 +125,10 @@ class _Router:
         return []
 
     # ── Alerts (async) ──────────────────────────────────────────────────────
-    async def async_get_alerts(self, limit: int = 20) -> list:
+    async def async_get_alerts(self, limit: int = 20, user_id = None) -> list:
         if self._mongo:
             try:
-                return await self._mongo.async_get_alerts(limit)
+                return await self._mongo.async_get_alerts(limit, user_id)
             except Exception:
                 pass
         return []
