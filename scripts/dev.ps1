@@ -20,7 +20,7 @@ Write-Host '[BACKEND] Starting FastAPI on http://localhost:8005...' -ForegroundC
 $backendJob = Start-Job -ScriptBlock {
     param($root)
     Set-Location $root
-    & "$root\.venv\Scripts\uvicorn.exe" main:app --host 0.0.0.0 --port 8005
+    & "$root\.venv\Scripts\uvicorn.exe" main:app --host 0.0.0.0 --port 8005 --reload
 } -ArgumentList $ROOT
 
 # Give backend 3 seconds to start before launching frontend
@@ -34,7 +34,12 @@ try {
 } finally {
     Write-Host ""
     Write-Host "Stopping backend server..." -ForegroundColor Red
+    # Cleanup the job
     Stop-Job $backendJob -PassThru | Remove-Job -Force
-    Get-Process -Name "uvicorn" -ErrorAction SilentlyContinue | Stop-Process -Force
+    # Hard-kill any process still holding port 8005 to prevent "port in use" errors on restart
+    $portPid = (Get-NetTCPConnection -LocalPort 8005 -ErrorAction SilentlyContinue).OwningProcess
+    if ($portPid) {
+        Stop-Process -Id $portPid -Force -ErrorAction SilentlyContinue
+    }
     Write-Host "Both servers stopped." -ForegroundColor Green
 }
