@@ -9,6 +9,7 @@ import {
 import { Brain, UserSearch, BarChart2, ShieldOff, Activity } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 
 export const Route = createFileRoute("/")({
   component: Overview,
@@ -35,6 +36,13 @@ function Overview() {
   const [stats, setStats] = useState<any>(null);
   const [alerts, setAlerts] = useState<any[]>([]);
   const [recent, setRecent] = useState<any[]>([]);
+
+  const tierBreakdown = stats?.tier_breakdown || {};
+  const distribution = [
+    { name: "Legit", value: tierBreakdown.low || 0, color: "var(--color-success)" },
+    { name: "Review", value: tierBreakdown.med || 0, color: "var(--color-gold)" },
+    { name: "Mule", value: tierBreakdown.high || 0, color: "var(--color-coral)" },
+  ].filter(d => d.value > 0);
 
   useEffect(() => {
     const token = localStorage.getItem("auth_token");
@@ -105,43 +113,67 @@ function Overview() {
 
       {/* Body grid */}
       <div className="mt-6 grid grid-cols-1 xl:grid-cols-3 gap-4">
-        {/* Recent alerts */}
-        <GlassCard className="xl:col-span-2 p-5">
+        {/* Recent alerts & Distribution */}
+        <GlassCard className="xl:col-span-2 p-5 flex flex-col">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="font-display text-lg font-semibold">Recent alerts</h2>
+              <h2 className="font-display text-lg font-semibold">Risk distribution & Alerts</h2>
               <p className="text-xs text-muted-foreground">High-risk accounts requiring review</p>
             </div>
           </div>
-          {alerts.length > 0 ? (
-            <div className="space-y-2">
-              {alerts.map((a, i) => (
-                <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-surface-2/40 border border-border/40">
-                  <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded bg-coral/10 text-coral flex items-center justify-center">
-                      <ShieldOff className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">Risk Score: {a.risk_score}</p>
-                      <p className="text-xs text-muted-foreground">{new Date(a.created_at).toLocaleString()}</p>
-                    </div>
-                  </div>
-                  <Btn variant="secondary" size="sm">Review</Btn>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-1">
+            {/* Pie Chart */}
+            <div className="flex flex-col items-center justify-center min-h-[200px]">
+              {distribution.length > 0 ? (
+                <div className="h-full w-full max-h-[250px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={distribution} dataKey="value" nameKey="name" innerRadius={60} outerRadius={80} paddingAngle={2}>
+                        {distribution.map((d) => <Cell key={d.name} fill={d.color} stroke="oklch(0.18 0.018 260)" strokeWidth={3} />)}
+                      </Pie>
+                      <Tooltip contentStyle={{ background: "oklch(0.22 0.02 260)", border: "1px solid oklch(1 0 0 / 0.08)", borderRadius: 10, fontSize: 12 }} />
+                    </PieChart>
+                  </ResponsiveContainer>
                 </div>
-              ))}
+              ) : (
+                <div className="flex flex-col items-center justify-center text-center">
+                  <div className="h-14 w-14 rounded-2xl bg-surface-2 grid place-items-center mb-3">
+                    <ShieldOff className="h-7 w-7 text-muted-foreground" />
+                  </div>
+                  <p className="text-sm font-medium text-muted-foreground">No data yet</p>
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
-              <div className="h-14 w-14 rounded-2xl bg-surface-2 grid place-items-center">
-                <ShieldOff className="h-7 w-7 text-muted-foreground" />
-              </div>
-              <p className="text-sm font-medium text-muted-foreground">No alerts yet</p>
-              <p className="text-xs text-muted-foreground max-w-xs">
-                Score an individual account or run a batch to start generating alerts.
-              </p>
-              <Link to="/score"><Btn variant="secondary" size="sm">Score an account</Btn></Link>
+            
+            {/* Alerts List */}
+            <div className="flex flex-col justify-center">
+              {alerts.length > 0 ? (
+                <div className="space-y-2">
+                  {alerts.slice(0, 4).map((a, i) => (
+                    <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-surface-2/40 border border-border/40">
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 rounded bg-coral/10 text-coral flex items-center justify-center">
+                          <ShieldOff className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">Risk Score: {a.risk_score}</p>
+                          <p className="text-xs text-muted-foreground">{new Date(a.created_at).toLocaleString()}</p>
+                        </div>
+                      </div>
+                      <Btn variant="secondary" size="sm">Review</Btn>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center text-center">
+                  <p className="text-xs text-muted-foreground max-w-[200px]">
+                    Score an individual account or run a batch to generate risk statistics.
+                  </p>
+                  <Link to="/score" className="mt-4"><Btn variant="secondary" size="sm">Score an account</Btn></Link>
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </GlassCard>
 
         {/* Feature importance */}
