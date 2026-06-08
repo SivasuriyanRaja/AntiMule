@@ -289,6 +289,8 @@ async def model_feature_importance():
     try:
         import pandas as pd
         df = pd.read_csv(importances_file, header=None, names=["feature", "importance"])
+        df = df.dropna(subset=["feature"])
+        df = df[df["feature"] != "0"] # just in case
         # Return top 20
         top_features = df.head(20).to_dict(orient="records")
         return {"available": True, "features": top_features}
