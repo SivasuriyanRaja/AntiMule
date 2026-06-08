@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { AppShell } from "@/components/cybershield/AppShell";
+import { AppShell } from "@/components/antimule/AppShell";
 import {
   Btn,
   GlassCard,
   MetricTile,
   SectionHeader,
-} from "@/components/cybershield/primitives";
+} from "@/components/antimule/primitives";
 import { Brain, UserSearch, BarChart2, ShieldOff, Activity } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";

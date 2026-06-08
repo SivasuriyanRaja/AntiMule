@@ -30,7 +30,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="flex items-center gap-3 px-2 pb-4">
           <ShieldMascot size={36} />
           <div>
-            <div className="font-display text-base font-semibold tracking-tight">CyberShield</div>
+            <div className="font-display text-base font-semibold tracking-tight">AntiMule</div>
             <div className="text-[11px] text-muted-foreground">Fraud Intelligence</div>
           </div>
         </div>
@@ -71,7 +71,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-3 px-4 lg:px-8 h-16">
             <div className="lg:hidden flex items-center gap-2">
               <ShieldMascot size={28} />
-              <span className="font-display font-semibold">CyberShield</span>
+              <span className="font-display font-semibold">AntiMule</span>
             </div>
             <div className="flex-1 max-w-xl ml-2">
               <label className="relative block">

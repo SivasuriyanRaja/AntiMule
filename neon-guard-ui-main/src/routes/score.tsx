@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { AppShell } from "@/components/cybershield/AppShell";
-import { Btn, GlassCard, SectionHeader } from "@/components/cybershield/primitives";
+import { AppShell } from "@/components/antimule/AppShell";
+import { Btn, GlassCard, SectionHeader } from "@/components/antimule/primitives";
 import { ScanSearch, Workflow, Loader2 } from "lucide-react";
 import { useState } from "react";
 
