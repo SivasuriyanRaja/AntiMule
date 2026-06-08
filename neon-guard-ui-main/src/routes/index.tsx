@@ -43,7 +43,7 @@ function Overview() {
     // Fetch DB Stats
     fetch(`${API_BASE}/db/stats`, { headers })
       .then(r => r.json())
-      .then(data => { if (data.available) setStats(data); })
+      .then(data => { if (data.total_scored !== undefined) setStats(data); })
       .catch(() => {});
 
     // Fetch Alerts
@@ -55,7 +55,7 @@ function Overview() {
     // Fetch Recent Activity
     fetch(`${API_BASE}/db/recent?limit=5`, { headers })
       .then(r => r.json())
-      .then(data => { if (data.predictions) setRecent(data.predictions); })
+      .then(data => { if (data.results) setRecent(data.results); })
       .catch(() => {});
     // Fetch feature importances
     fetch(`${API_BASE}/model/feature-importance`)
@@ -97,7 +97,7 @@ function Overview() {
 
       {/* KPI row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <MetricTile label="Transactions scored" value={stats?.total_predictions ?? "—"} tone="info" />
+        <MetricTile label="Transactions scored" value={stats?.total_scored ?? "—"} tone="info" />
         <MetricTile label="Suspicious flagged" value={stats?.open_alerts ?? "—"} tone="warning" />
         <MetricTile label="Confirmed mule" value={stats?.mule_count ?? "—"} tone="critical" />
         <MetricTile label="Model precision" value={bestModel ? `${(bestModel.precision * 100).toFixed(1)}%` : "—"} tone="success" />
