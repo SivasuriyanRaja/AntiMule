@@ -16,10 +16,21 @@ if _ML_DIR not in sys.path:
     sys.path.insert(0, _ML_DIR)
 
 # ── Standard library ──────────────────────────────────────────────────────────
-import io, json, queue, tempfile, threading, traceback
+import io, json, queue, tempfile, threading, traceback, uuid
+
+# ── DB layer (non-blocking — if DB is down, API still works) ─────────────────
+_DB_ROOT = os.path.dirname(os.path.abspath(__file__))
+if _DB_ROOT not in sys.path:
+    sys.path.insert(0, _DB_ROOT)
+try:
+    from db import db as _db
+    _DB_AVAILABLE = True
+except Exception as _db_err:
+    _DB_AVAILABLE = False
+    print(f"[DB] Not available (API still works): {_db_err}")
 
 # ── FastAPI ───────────────────────────────────────────────────────────────────
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -104,6 +115,16 @@ async def train(file: UploadFile = File(...)):
                     f"recall={best['recall']} "
                     f"precision={best['precision']}"
                 )
+                # ── Persist metrics to DB (non-blocking) ──────────────
+                if _DB_AVAILABLE:
+                    try:
+                        import asyncio as _asyncio
+                        _asyncio.get_event_loop().run_until_complete(
+                            _db.async_save_model_metrics(all_metrics)
+                        )
+                        log_q.put("[DB] Training metrics saved to database.")
+                    except Exception as _dbe:
+                        log_q.put(f"[DB] Metrics save skipped: {_dbe}")
             except Exception:
                 log_q.put(f"[ERROR] {traceback.format_exc()}")
             finally:
@@ -134,12 +155,18 @@ class AccountData(BaseModel):
 
 
 @app.post("/predict")
-def predict_single(account: AccountData):
+async def predict_single(account: AccountData):
     if not _ML_AVAILABLE:
         raise HTTPException(status_code=503, detail="ML modules not available")
     try:
         detector = get_detector()
         result   = detector.predict_single(account.model_dump())
+        # ── Persist to DB (non-blocking) ───────────────────────────────
+        if _DB_AVAILABLE:
+            try:
+                await _db.async_save_prediction(account.model_dump(), result, source="api")
+            except Exception:
+                pass
         return {"status": "success", "prediction": result}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -159,8 +186,20 @@ async def predict_batch(file: UploadFile = File(...)):
         results  = detector.predict_batch(df)
 
         mule_count = int((results["prediction"] == 1).sum())
+        scan_id    = str(uuid.uuid4())
+
+        # ── Persist batch to DB (non-blocking) ─────────────────────────
+        if _DB_AVAILABLE:
+            try:
+                accounts_list = df.to_dict(orient="records")
+                results_list  = results.to_dict(orient="records")
+                await _db.async_save_batch(scan_id, accounts_list, results_list, source="api")
+            except Exception:
+                pass
+
         return {
-            "status": "success",
+            "status":  "success",
+            "scan_id": scan_id,
             "summary": {
                 "total":      len(results),
                 "mule_count": mule_count,
@@ -171,6 +210,58 @@ async def predict_batch(file: UploadFile = File(...)):
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+
+# ── /db/* endpoints ────────────────────────────────────────────────────────────
+@app.get("/db/status")
+async def db_status():
+    """MongoDB + MySQL connectivity check."""
+    if not _DB_AVAILABLE:
+        return {"available": False, "reason": "DB module not loaded"}
+    return _db.status()
+
+
+@app.get("/db/stats")
+async def db_stats():
+    """Live prediction statistics from DB."""
+    if not _DB_AVAILABLE:
+        raise HTTPException(status_code=503, detail="DB not available")
+    try:
+        stats = await _db.async_get_stats()
+        return stats
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/db/recent")
+async def db_recent(limit: int = Query(default=50, le=500)):
+    """Most recent predictions from DB."""
+    if not _DB_AVAILABLE:
+        raise HTTPException(status_code=503, detail="DB not available")
+    try:
+        rows = await _db.async_get_recent(limit)
+        for r in rows:
+            if "created_at" in r and hasattr(r.get("created_at"), "isoformat"):
+                r["created_at"] = r["created_at"].isoformat()
+        return {"count": len(rows), "results": rows}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/db/alerts")
+async def db_alerts(limit: int = Query(default=20, le=100)):
+    """Unacknowledged high-risk alerts."""
+    if not _DB_AVAILABLE:
+        raise HTTPException(status_code=503, detail="DB not available")
+    try:
+        alerts = await _db.async_get_alerts(limit)
+        for a in alerts:
+            if "created_at" in a and hasattr(a.get("created_at"), "isoformat"):
+                a["created_at"] = a["created_at"].isoformat()
+        return {"count": len(alerts), "alerts": alerts}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":
