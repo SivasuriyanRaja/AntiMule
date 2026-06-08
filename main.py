@@ -264,6 +264,37 @@ async def db_alerts(limit: int = Query(default=20, le=100)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ── /model/* endpoints ────────────────────────────────────────────────────────
+@app.get("/model/metrics")
+async def model_metrics():
+    """Returns training evaluation metrics from the latest run."""
+    reports_dir = os.path.join(_ROOT, "neon-guard-ui-main", "src", "lib", "reports")
+    metrics_file = os.path.join(reports_dir, "evaluation_metrics.json")
+    if not os.path.exists(metrics_file):
+        return {"available": False, "reason": "No model trained yet"}
+    try:
+        with open(metrics_file, "r") as f:
+            data = json.load(f)
+        return {"available": True, "metrics": data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/model/feature-importance")
+async def model_feature_importance():
+    """Returns top feature importances from the latest run."""
+    reports_dir = os.path.join(_ROOT, "neon-guard-ui-main", "src", "lib", "reports")
+    importances_file = os.path.join(reports_dir, "feature_importances.csv")
+    if not os.path.exists(importances_file):
+        return {"available": False, "reason": "No model trained yet"}
+    try:
+        import pandas as pd
+        df = pd.read_csv(importances_file, header=None, names=["feature", "importance"])
+        # Return top 20
+        top_features = df.head(20).to_dict(orient="records")
+        return {"available": True, "features": top_features}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8005, reload=True)
