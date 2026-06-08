@@ -42,14 +42,27 @@ _SessionLocal = None
 def get_engine():
     global _engine, _SessionLocal
     if _engine is None:
-        _engine = create_engine(
-            DB_URL,
-            poolclass=QueuePool,
-            pool_size=10,
-            max_overflow=20,
-            pool_pre_ping=True,
-            echo=False,
-        )
+        try:
+            # Test MySQL connection first
+            test_engine = create_engine(DB_URL, connect_args={"connect_timeout": 2})
+            with test_engine.connect() as conn:
+                pass
+            _engine = create_engine(
+                DB_URL,
+                poolclass=QueuePool,
+                pool_size=10,
+                max_overflow=20,
+                pool_pre_ping=True,
+                echo=False,
+            )
+        except Exception as e:
+            print(f"[DB] MySQL unavailable, falling back to SQLite: {e}")
+            sqlite_url = "sqlite:///antimule.db"
+            _engine = create_engine(
+                sqlite_url,
+                connect_args={"check_same_thread": False},
+                echo=False,
+            )
         _SessionLocal = sessionmaker(bind=_engine, autocommit=False, autoflush=False)
     return _engine
 
