@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/antimule/AppShell";
 import { Btn, GlassCard, SectionHeader } from "@/components/antimule/primitives";
-import { FileUp, Play, CheckCircle2, XCircle, AlertCircle, Cpu } from "lucide-react";
+import { FileUp, Play, CheckCircle2, XCircle, AlertCircle, Cpu, Loader2 } from "lucide-react";
 import React, { useState, useRef, useEffect } from "react";
 
 export const Route = createFileRoute("/train")({
