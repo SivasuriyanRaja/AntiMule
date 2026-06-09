@@ -1,0 +1,225 @@
+"""
+preprocess_optimized.py
+Optimized data loading, cleaning, and feature engineering for mule detection.
+Improvements:
+  - Vectorized operations (avoid loops)
+  - Efficient label encoding with caching
+  - Faster ratio computation
+  - Memory-efficient imputation
+"""
+
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.impute import SimpleImputer
+from sklearn.ensemble import IsolationForest
+import joblib
+import os
+
+KEY_FEATURES = [
+    'F115', 'F321', 'F527', 'F531', 'F670',
+    'F1692', 'F2082', 'F2122', 'F2582', 'F2678',
+    'F2737', 'F2956', 'F3043', 'F3836', 'F3887',
+    'F3889', 'F3891', 'F3894'
+]
+TARGET           = 'F3924'  # Default, can be auto-detected
+CATEGORICAL_COLS = ['F2230', 'F3886', 'F3888', 'F3889', 'F3890', 'F3891', 'F3892', 'F3893']
+RATIO_PAIRS      = [('F115', 'F321'), ('F527', 'F531'), ('F2082', 'F2122'), ('F2582', 'F2678')]
+
+
+def detect_target_column(df: pd.DataFrame, target_hint: str = None) -> str:
+    """Auto-detect target column from dataset."""
+    # If target_hint provided and exists, use it
+    if target_hint and target_hint in df.columns:
+        return target_hint
+    
+    # Try common target names
+    common_targets = ['target', 'label', 'class', 'outcome', 'y', 'TARGET', 'Label', 'Class']
+    for col in common_targets:
+        if col in df.columns:
+            return col
+    
+    # If default TARGET exists, use it
+    if TARGET in df.columns:
+        return TARGET
+    
+    # Otherwise, find binary/categorical column (likely target)
+    for col in df.columns:
+        unique_vals = df[col].nunique()
+        if unique_vals <= 10 and unique_vals > 1:  # Likely a classification target
+            print(f"[AUTO-DETECT] Using '{col}' as target (unique values: {unique_vals})")
+            return col
+    
+    # Fallback: last column
+    last_col = df.columns[-1]
+    print(f"[AUTO-DETECT] Using last column '{last_col}' as target")
+    return last_col
+
+
+def load_data(filepath: str, target_col: str = None) -> tuple:
+    """Load CSV with optimized dtypes and auto-detect target."""
+    df = pd.read_csv(filepath, index_col=0, low_memory=False)
+    print(f"[INFO] Loaded dataset: {df.shape[0]} rows, {df.shape[1]} columns")
+    
+    # Auto-detect target column
+    detected_target = detect_target_column(df, target_col)
+    
+    if detected_target in df.columns:
+        print(f"[INFO] Target column: '{detected_target}'")
+        print(f"[INFO] Target distribution:\n{df[detected_target].value_counts()}")
+    
+    return df, detected_target
+
+
+def engineer_features(df: pd.DataFrame):
+    """Optimized feature engineering with vectorized operations."""
+    df = df.copy()
+    label_encoders = {}
+
+    # Vectorized label encoding
+    for col in CATEGORICAL_COLS:
+        if col in df.columns:
+            le = LabelEncoder()
+            df[col] = df[col].astype(str).fillna('UNKNOWN')
+            df[col] = le.fit_transform(df[col])
+            label_encoders[col] = le
+
+    # Date parsing (vectorized)
+    if 'F3888' in df.columns:
+        try:
+            dates = pd.to_datetime(df['F3888'], errors='coerce')
+            df['F3888_year']     = dates.dt.year.fillna(0).astype(int)
+            df['F3888_month']    = dates.dt.month.fillna(0).astype(int)
+            df['F3888_age_days'] = (pd.Timestamp('today') - dates).dt.days.fillna(-1).astype(int)
+            df.drop(columns=['F3888'], inplace=True)
+        except Exception as e:
+            print(f"[WARN] Error parsing F3888: {e}")
+            df.drop(columns=['F3888'], errors='ignore', inplace=True)
+
+    # Vectorized ratio computation
+    for a, b in RATIO_PAIRS:
+        if a in df.columns and b in df.columns:
+            col_name = f'ratio_{a}_{b}'
+            # Avoid division by zero - use numpy vectorization
+            with np.errstate(divide='ignore', invalid='ignore'):
+                df[col_name] = np.divide(df[a].values, df[b].values, 
+                                         where=df[b].values != 0, 
+                                         out=np.full_like(df[a].values, np.nan, dtype=float))
+            df[col_name] = df[col_name].replace([np.inf, -np.inf], np.nan)
+
+    # Interaction terms
+    if 'F3836' in df.columns and 'F3894' in df.columns:
+        df['velocity_age_interaction'] = df['F3836'].values * df['F3894'].values
+
+    # Log transformations (vectorized)
+    for col in ['F3836', 'F2737', 'F3887']:
+        if col in df.columns:
+            df[f'log_{col}'] = np.log1p(np.clip(df[col].values, 0, None))
+
+    return df, label_encoders
+
+
+def select_and_clean_features(df: pd.DataFrame, target_col: str = None, top_n_variance: int = 150):
+    """Optimized feature selection with better handling."""
+    df = df.copy()
+    
+    # Use provided target or detect it
+    if target_col is None:
+        target_col = detect_target_column(df)
+    
+    # Ensure target exists
+    if target_col not in df.columns:
+        raise ValueError(f"Target column '{target_col}' not found in dataset. Available: {df.columns.tolist()}")
+    
+    # Drop high-missing columns
+    missing_rate = df.isnull().mean()
+    high_missing = missing_rate[missing_rate > 0.80].index.tolist()
+    df.drop(columns=high_missing, inplace=True, errors='ignore')
+    print(f"[INFO] Dropped {len(high_missing)} columns with >80% missing")
+
+    y = df[target_col].copy()
+    X = df.drop(columns=[target_col], errors='ignore')
+    X = X.select_dtypes(include=[np.number])
+
+    # Feature prioritization
+    key_present = [f for f in KEY_FEATURES if f in X.columns]
+    engineered  = [c for c in X.columns if c.startswith(('ratio_', 'log_')) 
+                   or c in ['velocity_age_interaction', 'F3888_year', 'F3888_month', 'F3888_age_days']]
+    non_key     = [c for c in X.columns if c not in key_present and c not in engineered]
+
+    # Variance-based selection (vectorized)
+    if non_key:
+        variances  = X[non_key].var().sort_values(ascending=False)
+        top_by_var = variances.head(top_n_variance).index.tolist()
+    else:
+        top_by_var = []
+
+    selected_cols = list(set(key_present + engineered + top_by_var))
+    X = X[selected_cols]
+    print(f"[INFO] Selected {len(selected_cols)} features")
+    return X, y, selected_cols
+
+
+def impute_and_scale(X_train, X_test=None, artifacts_dir='models'):
+    """Optimized imputation and scaling with better memory efficiency."""
+    os.makedirs(artifacts_dir, exist_ok=True)
+    
+    # Median imputation (more robust for skewed features)
+    imputer = SimpleImputer(strategy='median')
+    X_train_imp = imputer.fit_transform(X_train)
+    
+    # Scaling
+    scaler = StandardScaler()
+    X_train_s = scaler.fit_transform(X_train_imp)
+    
+    # Save artifacts
+    joblib.dump(imputer, os.path.join(artifacts_dir, 'imputer.pkl'))
+    joblib.dump(scaler, os.path.join(artifacts_dir, 'scaler.pkl'))
+    joblib.dump(X_train.columns.tolist(), os.path.join(artifacts_dir, 'feature_cols.pkl'))
+    
+    if X_test is not None:
+        X_test_imp = imputer.transform(X_test)
+        X_test_s = scaler.transform(X_test_imp)
+        return pd.DataFrame(X_train_s, columns=X_train.columns), \
+               pd.DataFrame(X_test_s, columns=X_test.columns)
+    
+    return pd.DataFrame(X_train_s, columns=X_train.columns), None
+
+
+def transform_new_data(df: pd.DataFrame, artifacts_dir: str = 'models') -> np.ndarray:
+    """Transform new data using saved artifacts (vectorized). Handles partial inputs by aligning columns."""
+    imputer = joblib.load(os.path.join(artifacts_dir, 'imputer.pkl'))
+    scaler = joblib.load(os.path.join(artifacts_dir, 'scaler.pkl'))
+    feature_cols = joblib.load(os.path.join(artifacts_dir, 'feature_cols.pkl'))
+    
+    # Align dataframe columns to training features, filling missing with NaN
+    aligned_df = pd.DataFrame(index=df.index, columns=feature_cols)
+    for col in feature_cols:
+        if col in df.columns:
+            aligned_df[col] = pd.to_numeric(df[col], errors='coerce')
+        else:
+            aligned_df[col] = np.nan
+            
+    X_imp = imputer.transform(aligned_df[feature_cols])
+    X_scaled = scaler.transform(X_imp)
+    
+    # Return as DataFrame if model requires feature names
+    return pd.DataFrame(X_scaled, columns=feature_cols)
+
+
+def fit_isolation_forest(X_train: pd.DataFrame | np.ndarray, artifacts_dir: str = 'models', contamination: float = 0.01):
+    """Fit Isolation Forest for anomaly detection."""
+    os.makedirs(artifacts_dir, exist_ok=True)
+    iso_forest = IsolationForest(contamination=contamination, random_state=42, n_jobs=-1)
+    iso_forest.fit(X_train)
+    joblib.dump(iso_forest, os.path.join(artifacts_dir, 'isolation_forest.pkl'))
+    print(f"[INFO] Isolation Forest fitted and saved")
+
+
+def isolation_anomaly_scores(X: np.ndarray, artifacts_dir: str = 'models') -> np.ndarray:
+    """Get anomaly scores from Isolation Forest (vectorized)."""
+    iso_forest = joblib.load(os.path.join(artifacts_dir, 'isolation_forest.pkl'))
+    # Convert decision function to probability (0-1 range)
+    scores = -iso_forest.score_samples(X)  # Higher is more anomalous
+    scores = (scores - scores.min()) / (scores.max() - scores.min() + 1e-8)
+    return scores
