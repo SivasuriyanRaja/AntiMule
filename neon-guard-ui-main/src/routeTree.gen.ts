@@ -11,10 +11,13 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TrainRouteImport } from './routes/train'
 import { Route as ScoreRouteImport } from './routes/score'
+import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as InsightsRouteImport } from './routes/insights'
+import { Route as CasesRouteImport } from './routes/cases'
 import { Route as BatchRouteImport } from './routes/batch'
+import { Route as AuditRouteImport } from './routes/audit'
 import { Route as IndexRouteImport } from './routes/index'
 
 const TrainRoute = TrainRouteImport.update({
@@ -25,6 +28,11 @@ const TrainRoute = TrainRouteImport.update({
 const ScoreRoute = ScoreRouteImport.update({
   id: '/score',
   path: '/score',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportsRoute = ReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RegisterRoute = RegisterRouteImport.update({
@@ -42,9 +50,19 @@ const InsightsRoute = InsightsRouteImport.update({
   path: '/insights',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CasesRoute = CasesRouteImport.update({
+  id: '/cases',
+  path: '/cases',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const BatchRoute = BatchRouteImport.update({
   id: '/batch',
   path: '/batch',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuditRoute = AuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -55,29 +73,38 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/audit': typeof AuditRoute
   '/batch': typeof BatchRoute
+  '/cases': typeof CasesRoute
   '/insights': typeof InsightsRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/reports': typeof ReportsRoute
   '/score': typeof ScoreRoute
   '/train': typeof TrainRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/audit': typeof AuditRoute
   '/batch': typeof BatchRoute
+  '/cases': typeof CasesRoute
   '/insights': typeof InsightsRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/reports': typeof ReportsRoute
   '/score': typeof ScoreRoute
   '/train': typeof TrainRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/audit': typeof AuditRoute
   '/batch': typeof BatchRoute
+  '/cases': typeof CasesRoute
   '/insights': typeof InsightsRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/reports': typeof ReportsRoute
   '/score': typeof ScoreRoute
   '/train': typeof TrainRoute
 }
@@ -85,38 +112,50 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/audit'
     | '/batch'
+    | '/cases'
     | '/insights'
     | '/login'
     | '/register'
+    | '/reports'
     | '/score'
     | '/train'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/audit'
     | '/batch'
+    | '/cases'
     | '/insights'
     | '/login'
     | '/register'
+    | '/reports'
     | '/score'
     | '/train'
   id:
     | '__root__'
     | '/'
+    | '/audit'
     | '/batch'
+    | '/cases'
     | '/insights'
     | '/login'
     | '/register'
+    | '/reports'
     | '/score'
     | '/train'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AuditRoute: typeof AuditRoute
   BatchRoute: typeof BatchRoute
+  CasesRoute: typeof CasesRoute
   InsightsRoute: typeof InsightsRoute
   LoginRoute: typeof LoginRoute
   RegisterRoute: typeof RegisterRoute
+  ReportsRoute: typeof ReportsRoute
   ScoreRoute: typeof ScoreRoute
   TrainRoute: typeof TrainRoute
 }
@@ -135,6 +174,13 @@ declare module '@tanstack/react-router' {
       path: '/score'
       fullPath: '/score'
       preLoaderRoute: typeof ScoreRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reports': {
+      id: '/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof ReportsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/register': {
@@ -158,11 +204,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InsightsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/cases': {
+      id: '/cases'
+      path: '/cases'
+      fullPath: '/cases'
+      preLoaderRoute: typeof CasesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/batch': {
       id: '/batch'
       path: '/batch'
       fullPath: '/batch'
       preLoaderRoute: typeof BatchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/audit': {
+      id: '/audit'
+      path: '/audit'
+      fullPath: '/audit'
+      preLoaderRoute: typeof AuditRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -177,10 +237,13 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AuditRoute: AuditRoute,
   BatchRoute: BatchRoute,
+  CasesRoute: CasesRoute,
   InsightsRoute: InsightsRoute,
   LoginRoute: LoginRoute,
   RegisterRoute: RegisterRoute,
+  ReportsRoute: ReportsRoute,
   ScoreRoute: ScoreRoute,
   TrainRoute: TrainRoute,
 }

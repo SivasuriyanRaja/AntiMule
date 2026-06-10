@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { AuthShell } from "@/components/antimule/AuthShell";
 import { GlassCard, Btn } from "@/components/antimule/primitives";
 import { useState } from "react";
-import { Loader2, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 
 export const Route = createFileRoute("/register")({
   component: Register,
@@ -13,20 +13,23 @@ function Register() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password !== confirmPassword) {
-      setError("Passwords do not match");
+    if (password !== confirm) {
+      setError("Passwords do not match.");
       return;
     }
-
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters.");
+      return;
+    }
     setLoading(true);
     setError(null);
-
     try {
       const res = await fetch("http://localhost:8005/auth/register", {
         method: "POST",
@@ -34,15 +37,14 @@ function Register() {
         body: JSON.stringify({ name, email, password }),
       });
       const data = await res.json();
-
       if (res.ok && data.status === "success") {
-        // Auto-login or redirect to login
-        navigate({ to: "/login" });
+        setSuccess(true);
+        setTimeout(() => navigate({ to: "/login" }), 2000);
       } else {
-        setError(data.detail || "Registration failed");
+        setError(data.detail || "Registration failed. Contact your system administrator.");
       }
-    } catch (err) {
-      setError("Failed to connect to the server.");
+    } catch {
+      setError("Unable to connect to the server. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -50,80 +52,117 @@ function Register() {
 
   return (
     <AuthShell>
-      <GlassCard className="p-8">
-        <div className="mb-6 text-center">
-          <h2 className="font-display text-xl font-semibold">Create an account</h2>
-          <p className="text-sm text-muted-foreground mt-1">Join the AntiMule platform</p>
-        </div>
-
-        {error && (
-          <div className="mb-4 flex items-center gap-2 p-3 rounded-lg border border-critical/30 bg-critical/10 text-critical text-sm">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            <p>{error}</p>
+      <GlassCard className="p-7">
+        {success ? (
+          <div className="flex flex-col items-center justify-center py-6 text-center gap-4">
+            <div className="h-14 w-14 rounded-full bg-success/15 flex items-center justify-center">
+              <CheckCircle2 className="h-7 w-7 text-success" />
+            </div>
+            <div>
+              <p className="font-semibold text-base">Account Created</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Redirecting you to the sign-in portal…
+              </p>
+            </div>
           </div>
+        ) : (
+          <>
+            <div className="mb-6">
+              <h2 className="font-display text-xl font-semibold">Request Portal Access</h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Register a new compliance officer account
+              </p>
+            </div>
+
+            {error && (
+              <div className="mb-4 flex items-start gap-2.5 p-3 rounded-lg border border-critical/30 bg-critical/10 text-critical text-sm">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                <p>{error}</p>
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Full Name
+                </label>
+                <input
+                  id="reg-name"
+                  type="text"
+                  required
+                  placeholder="e.g. Sarah Johnson"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-surface/60 px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary/50 placeholder:text-muted-foreground/50"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Employee Email
+                </label>
+                <input
+                  id="reg-email"
+                  type="email"
+                  required
+                  placeholder="officer@yourbank.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-surface/60 px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary/50 placeholder:text-muted-foreground/50"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Password
+                </label>
+                <input
+                  id="reg-password"
+                  type="password"
+                  required
+                  placeholder="Minimum 8 characters"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-surface/60 px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary/50 placeholder:text-muted-foreground/50"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Confirm Password
+                </label>
+                <input
+                  id="reg-confirm"
+                  type="password"
+                  required
+                  placeholder="Re-enter password"
+                  value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-surface/60 px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary/50 placeholder:text-muted-foreground/50"
+                />
+              </div>
+
+              <Btn
+                id="register-submit"
+                type="submit"
+                variant="gold"
+                disabled={loading}
+                className="w-full justify-center mt-2"
+              >
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {loading ? "Creating account…" : "Create Officer Account"}
+              </Btn>
+            </form>
+
+            <hr className="divider-gold my-5" />
+            <p className="text-center text-xs text-muted-foreground">
+              Already have access?{" "}
+              <Link to="/login" className="text-primary hover:underline font-medium">
+                Sign in here
+              </Link>
+            </p>
+          </>
         )}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground/80">Name</label>
-            <input
-              type="text"
-              required
-              placeholder="John Doe"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-md border border-border bg-background/60 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 placeholder:text-muted-foreground/50 transition-shadow"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground/80">Email</label>
-            <input
-              type="email"
-              required
-              placeholder="analyst@antimule.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-md border border-border bg-background/60 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 placeholder:text-muted-foreground/50 transition-shadow"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground/80">Password</label>
-            <input
-              type="password"
-              required
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-md border border-border bg-background/60 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 placeholder:text-muted-foreground/50 transition-shadow"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground/80">Confirm Password</label>
-            <input
-              type="password"
-              required
-              placeholder="••••••••"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full rounded-md border border-border bg-background/60 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 placeholder:text-muted-foreground/50 transition-shadow"
-            />
-          </div>
-
-          <Btn type="submit" disabled={loading} className="w-full justify-center mt-6">
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            {loading ? "Registering..." : "Register"}
-          </Btn>
-        </form>
-
-        <p className="mt-6 text-center text-sm text-muted-foreground">
-          Already have an account?{" "}
-          <Link to="/login" className="text-primary hover:underline font-medium">
-            Sign in
-          </Link>
-        </p>
       </GlassCard>
     </AuthShell>
   );
