@@ -23,7 +23,6 @@ KEY_FEATURES = [
     'F3889', 'F3891', 'F3894'
 ]
 TARGET           = 'F3924'
-CATEGORICAL_COLS = ['F2230', 'F3886', 'F3888', 'F3889', 'F3890', 'F3891', 'F3892', 'F3893']
 RATIO_PAIRS      = [('F115', 'F321'), ('F527', 'F531'), ('F2082', 'F2122'), ('F2582', 'F2678')]
 
 
@@ -41,13 +40,15 @@ def engineer_features(df: pd.DataFrame):
     df = df.copy()
     label_encoders = {}
 
+    # Auto-detect categorical columns
+    cat_cols = df.select_dtypes(include=['object', 'category', 'bool']).columns.tolist()
+    
     # Vectorized label encoding
-    for col in CATEGORICAL_COLS:
-        if col in df.columns:
-            le = LabelEncoder()
-            df[col] = df[col].astype(str).fillna('UNKNOWN')
-            df[col] = le.fit_transform(df[col])
-            label_encoders[col] = le
+    for col in cat_cols:
+        le = LabelEncoder()
+        df[col] = df[col].astype(str).fillna('UNKNOWN')
+        df[col] = le.fit_transform(df[col])
+        label_encoders[col] = le
 
     # Date parsing (vectorized)
     if 'F3888' in df.columns:
@@ -108,6 +109,30 @@ def select_and_clean_features(df: pd.DataFrame, top_n_variance: int = 150):
     print(f"[INFO] Dropped {len(high_missing)} columns with >80% missing")
 
     y = df[target_col].copy()
+    
+    # Encode target to 0/1 if it contains strings or booleans
+    if y.dtype == 'object' or y.dtype.name == 'category' or y.dtype == 'bool':
+        val_counts = y.value_counts()
+        if len(val_counts) == 2:
+            majority_class = val_counts.index[0]
+            minority_class = val_counts.index[1]
+            # Common heuristics: if a class contains 'fraud' or 'mule', force it to be 1
+            pos_class = minority_class
+            for cls_val in val_counts.index:
+                if any(k in str(cls_val).lower() for k in ['fraud', 'mule', 'suspicious', 'true', '1']):
+                    pos_class = cls_val
+                    break
+            neg_class = majority_class if pos_class == minority_class else minority_class
+            
+            y = y.map({neg_class: 0, pos_class: 1})
+            print(f"[INFO] Auto-encoded target '{target_col}': {neg_class} -> 0, {pos_class} -> 1")
+        else:
+            # Fallback or single class
+            try:
+                y = pd.to_numeric(y, errors='coerce').fillna(0).astype(int)
+            except:
+                pass
+                
     X = df.drop(columns=[target_col], errors='ignore')
     X = X.select_dtypes(include=[np.number])
 
