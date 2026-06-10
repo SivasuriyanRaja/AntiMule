@@ -7,7 +7,7 @@ import {
   SectionHeader,
   StatusBadge,
 } from "@/components/antimule/primitives";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Briefcase,
   Search,
@@ -49,87 +49,7 @@ interface CaseItem {
   flagReason: string;
 }
 
-const INITIAL_CASES: CaseItem[] = [
-  {
-    id: "C-2041",
-    account: "ACC-88421",
-    customerName: "Priya Mehta",
-    tier: "high",
-    status: "open",
-    score: 87,
-    opened: "2026-06-08T09:14:00Z",
-    assignee: "You",
-    flagReason: "Unusual cross-border transaction velocity. 14 transfers in 24h.",
-    notes: [],
-  },
-  {
-    id: "C-2040",
-    account: "ACC-77391",
-    customerName: "Daniel Osei",
-    tier: "high",
-    status: "reviewing",
-    score: 79,
-    opened: "2026-06-05T14:22:00Z",
-    assignee: "You",
-    flagReason: "High debit ratio combined with new account (< 3 months).",
-    notes: [
-      { author: "You", text: "Requested KYC documents. Awaiting response.", time: "2026-06-06T10:00:00Z" },
-    ],
-  },
-  {
-    id: "C-2038",
-    account: "ACC-66102",
-    customerName: "Lin Wei",
-    tier: "med",
-    status: "reviewing",
-    score: 61,
-    opened: "2026-06-03T11:05:00Z",
-    assignee: "S. Patel",
-    flagReason: "Network centrality score elevated — linked to 3 flagged accounts.",
-    notes: [],
-  },
-  {
-    id: "C-2036",
-    account: "ACC-55892",
-    customerName: "James Morrow",
-    tier: "high",
-    status: "escalated",
-    score: 94,
-    opened: "2026-06-01T08:30:00Z",
-    assignee: "You",
-    flagReason: "Structured deposits below reporting threshold over 6 consecutive days.",
-    notes: [
-      { author: "You", text: "Escalated to Senior AML Officer.", time: "2026-06-02T09:00:00Z" },
-      { author: "R. Singh", text: "SAR filing initiated.", time: "2026-06-03T11:30:00Z" },
-    ],
-  },
-  {
-    id: "C-2031",
-    account: "ACC-44213",
-    customerName: "Aisha Bello",
-    tier: "low",
-    status: "closed",
-    score: 22,
-    opened: "2026-05-28T15:00:00Z",
-    assignee: "You",
-    flagReason: "Flagged by batch scan. Review confirmed low risk.",
-    notes: [
-      { author: "You", text: "Reviewed. No suspicious activity. Closing case.", time: "2026-05-30T12:00:00Z" },
-    ],
-  },
-  {
-    id: "C-2028",
-    account: "ACC-33104",
-    customerName: "Tomasz Kowalski",
-    tier: "med",
-    status: "closed",
-    score: 55,
-    opened: "2026-05-25T10:20:00Z",
-    assignee: "S. Patel",
-    flagReason: "Elevated transaction velocity. Explained by business account activity.",
-    notes: [],
-  },
-];
+const INITIAL_CASES: CaseItem[] = [];
 
 const STATUS_FILTERS = ["All", "Open", "Under Review", "Escalated", "Closed"] as const;
 
@@ -380,10 +300,34 @@ function CaseRow({ item, onUpdate }: { item: CaseItem; onUpdate: (updated: CaseI
 }
 
 function Cases() {
-  const [cases, setCases] = useState<CaseItem[]>(INITIAL_CASES);
+  const [cases, setCases] = useState<CaseItem[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("All");
   const [showModal, setShowModal] = useState(false);
+
+  useEffect(() => {
+    fetch("http://localhost:8005/db/alerts", {
+      headers: { Authorization: `Bearer ${localStorage.getItem("auth_token")}` }
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.alerts) {
+          setCases(data.alerts.map((a: any) => ({
+            id: a.prediction_id ? a.prediction_id.slice(-6).toUpperCase() : `C-${Math.floor(Math.random()*10000)}`,
+            account: a.account || "UNKNOWN",
+            customerName: "Review Account",
+            tier: (a.tier || "low").toLowerCase() as RiskTier,
+            status: "open" as CaseStatus,
+            score: a.score || 0,
+            opened: a.created_at || new Date().toISOString(),
+            assignee: "Unassigned",
+            notes: [],
+            flagReason: a.message || "Flagged by AI Model"
+          })));
+        }
+      })
+      .catch(console.error);
+  }, []);
 
   const filtered = useMemo(() => {
     return cases.filter((c) => {

@@ -38,10 +38,13 @@ const defaultFeatures = [
 function buildProfile(inputs: Record<string, string>, result: any) {
   const tier: "low" | "med" | "high" =
     result.risk_score >= 70 ? "high" : result.risk_score >= 40 ? "med" : "low";
-  const accountAge = inputs["F3894"] ? `${inputs["F3894"]} months` : "—";
-  const txVel = inputs["F3836"] || "—";
-  const debitRatio = inputs["F670"] ? (parseFloat(inputs["F670"]) * 100).toFixed(0) + "%" : "—";
-  return { tier, accountAge, txVel, debitRatio };
+  
+  const keys = Object.keys(inputs).filter(k => inputs[k]);
+  const k1 = keys[0] || "Feature 1"; const v1 = inputs[k1] || "—";
+  const k2 = keys[1] || "Feature 2"; const v2 = inputs[k2] || "—";
+  const k3 = keys[2] || "Feature 3"; const v3 = inputs[k3] || "—";
+  
+  return { tier, k1, v1, k2, v2, k3, v3 };
 }
 
 function Score() {
@@ -49,12 +52,26 @@ function Score() {
     const saved = localStorage.getItem("score_inputs");
     return saved ? JSON.parse(saved) : {};
   });
+  const [modelFeatures, setModelFeatures] = useState<any[]>(defaultFeatures);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(() => {
     const saved = localStorage.getItem("score_result");
     return saved ? JSON.parse(saved) : null;
   });
   const [caseCreated, setCaseCreated] = useState(false);
+
+  useEffect(() => {
+    fetch("http://localhost:8005/model/features")
+      .then(res => res.json())
+      .then(data => {
+        if (data.available && data.features) {
+          setModelFeatures(data.features.map((f: string) => ({
+            id: f, k: f, placeholder: `Enter ${f}`
+          })));
+        }
+      })
+      .catch(console.error);
+  }, []);
 
   useEffect(() => {
     localStorage.setItem("score_inputs", JSON.stringify(inputs));
@@ -144,7 +161,7 @@ function Score() {
             Enter account characteristics to compute the AML risk score
           </p>
           <div className="space-y-3">
-            {defaultFeatures.map((f) => (
+            {modelFeatures.slice(0, 12).map((f) => (
               <div key={f.id} className="space-y-1">
                 <label className="text-xs font-medium text-muted-foreground">{f.k}</label>
                 <input
@@ -155,6 +172,9 @@ function Score() {
                 />
               </div>
             ))}
+            {modelFeatures.length > 12 && (
+              <p className="text-xs text-muted-foreground italic">+{modelFeatures.length - 12} more features expected by model...</p>
+            )}
           </div>
           <Btn
             variant="gold"
@@ -206,12 +226,12 @@ function Score() {
               </p>
               <div className="grid grid-cols-2 gap-2">
                 {[
-                  { label: "Account Age", value: profile.accountAge, icon: Clock },
-                  { label: "Tx Velocity/24h", value: profile.txVel, icon: ScanSearch },
-                  { label: "Debit Ratio", value: profile.debitRatio, icon: Workflow },
+                  { label: profile.k1, value: profile.v1, icon: Clock },
+                  { label: profile.k2, value: profile.v2, icon: ScanSearch },
+                  { label: profile.k3, value: profile.v3, icon: Workflow },
                   { label: "Risk Classification", value: profile.tier.toUpperCase(), icon: ShieldAlert },
-                ].map(({ label, value, icon: Icon }) => (
-                  <div key={label} className="rounded-lg bg-surface-2/40 border border-border/30 p-2.5">
+                ].map(({ label, value, icon: Icon }, idx) => (
+                  <div key={idx} className="rounded-lg bg-surface-2/40 border border-border/30 p-2.5">
                     <div className="flex items-center gap-1.5 mb-0.5">
                       <Icon className="h-3 w-3 text-muted-foreground" />
                       <p className="text-[10px] text-muted-foreground">{label}</p>

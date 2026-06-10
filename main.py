@@ -326,6 +326,20 @@ async def model_feature_importance():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/model/features")
+async def model_features():
+    """Returns the expected feature columns for the trained model."""
+    artifacts_dir = os.path.join(_ROOT, "neon-guard-ui-main", "src", "lib", "models")
+    features_file = os.path.join(artifacts_dir, "feature_cols.pkl")
+    if not os.path.exists(features_file):
+        return {"available": False, "reason": "No model trained yet"}
+    try:
+        import joblib
+        features = joblib.load(features_file)
+        return {"available": True, "features": features}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8005, reload=False)
