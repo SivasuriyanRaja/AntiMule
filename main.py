@@ -311,10 +311,12 @@ async def model_feature_importance():
     try:
         import pandas as pd
         df = pd.read_csv(importances_file, header=None, names=["feature", "importance"])
+        if isinstance(df, pd.Series):
+            df = df.to_frame()
         df = df.dropna(subset=["feature"])
         df = df[df["feature"] != "0"] # just in case
         # Return top 20
-        top_features = df.head(20).to_dict(orient="records")
+        top_features = df.head(20).to_dict(orient="records") # type: ignore
         return {"available": True, "features": top_features}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
