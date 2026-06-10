@@ -46,6 +46,10 @@ class MuleDetectorOptimized:
         self._model = None
         self._label_encoders = None
         self._threshold = None
+        self._imputer = None
+        self._scaler = None
+        self._feature_cols = None
+        self._iso_forest = None
         self._cache = {}  # Simple cache for repeated predictions
         logger.info("MuleDetectorOptimized initialized")
     
@@ -54,6 +58,10 @@ class MuleDetectorOptimized:
         if self._model is None:
             self._model = joblib.load(os.path.join(self.artifacts_dir, 'best_model.pkl'))
             self._label_encoders = joblib.load(os.path.join(self.artifacts_dir, 'label_encoders.pkl'))
+            self._imputer = joblib.load(os.path.join(self.artifacts_dir, 'imputer.pkl'))
+            self._scaler = joblib.load(os.path.join(self.artifacts_dir, 'scaler.pkl'))
+            self._feature_cols = joblib.load(os.path.join(self.artifacts_dir, 'feature_cols.pkl'))
+            self._iso_forest = joblib.load(os.path.join(self.artifacts_dir, 'isolation_forest.pkl'))
             
             # Try to load optimized threshold, fall back to 0.5
             try:
@@ -98,11 +106,20 @@ class MuleDetectorOptimized:
         
         # Feature engineering
         df_eng, _ = engineer_features(df_row)
-        X_transformed = transform_new_data(df_eng, artifacts_dir=self.artifacts_dir)
+        
+        # Transform data using cached objects (AVOID DISK I/O)
+        aligned_df = pd.DataFrame(index=df_eng.index, columns=self._feature_cols)
+        for c in self._feature_cols:
+            aligned_df[c] = pd.to_numeric(df_eng[c], errors='coerce') if c in df_eng.columns else np.nan
+        X_imp = self._imputer.transform(aligned_df[self._feature_cols])
+        X_transformed = self._scaler.transform(X_imp)
         
         # Predictions (vectorized)
         ml_prob = float(model.predict_proba(X_transformed)[0][1])
-        iso_score = float(isolation_anomaly_scores(X_transformed, artifacts_dir=self.artifacts_dir)[0])
+        
+        # Anomaly score using cached isolation forest
+        scores = -self._iso_forest.score_samples(X_transformed)
+        iso_score = float((scores - scores.min()) / (scores.max() - scores.min() + 1e-8)[0]) if len(scores) > 0 else 0.0
         
         # Composite scoring with blended anomaly
         composite = (1 - iso_weight) * ml_prob + iso_weight * iso_score
@@ -145,11 +162,20 @@ class MuleDetectorOptimized:
         
         # Feature engineering
         df_eng, _ = engineer_features(df_work)
-        X_transformed = transform_new_data(df_eng, artifacts_dir=self.artifacts_dir)
+        
+        # Transform data using cached objects (AVOID DISK I/O)
+        aligned_df = pd.DataFrame(index=df_eng.index, columns=self._feature_cols)
+        for c in self._feature_cols:
+            aligned_df[c] = pd.to_numeric(df_eng[c], errors='coerce') if c in df_eng.columns else np.nan
+        X_imp = self._imputer.transform(aligned_df[self._feature_cols])
+        X_transformed = self._scaler.transform(X_imp)
         
         # Vectorized predictions
         ml_probs = model.predict_proba(X_transformed)[:, 1]
-        iso_scores = isolation_anomaly_scores(X_transformed, artifacts_dir=self.artifacts_dir)
+        
+        # Anomaly score using cached isolation forest
+        scores = -self._iso_forest.score_samples(X_transformed)
+        iso_scores = (scores - scores.min()) / (scores.max() - scores.min() + 1e-8)
         composites = (1 - iso_weight) * ml_probs + iso_weight * iso_scores
         
         # Output dataframe with all predictions
