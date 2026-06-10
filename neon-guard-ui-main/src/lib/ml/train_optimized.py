@@ -17,13 +17,6 @@ import numpy as np
 import pandas as pd
 import joblib
 from sklearn.model_selection import train_test_split
-from sklearn.ensemble import VotingClassifier
-from catboost import CatBoostClassifier
-from sklearn.metrics import (
-    classification_report, confusion_matrix, roc_auc_score,
-    average_precision_score, f1_score, precision_score, recall_score, roc_curve
-)
-from xgboost import XGBClassifier
 from lightgbm import LGBMClassifier
 from imblearn.over_sampling import SMOTE
 
@@ -41,54 +34,26 @@ def build_models_optimized(class_weight: float = 1.5) -> dict:
     """
     Build models with optimized hyperparameters for minority class.
     class_weight: higher = more weight to positive (mule) class.
-    CatBoost replaces Random Forest — better accuracy on tabular data,
-    native categorical handling, and faster inference.
+    We use exclusively LightGBM for maximum training and inference speed.
     """
-    # Calculate scale_pos_weight for XGBoost and LightGBM
     pos_weight = class_weight
     
     return {
-        'xgboost': XGBClassifier(
-            n_estimators=500,  # Increased from 300
-            max_depth=5,  # Reduced from 6 for better generalization
-            learning_rate=0.03,  # Reduced from 0.05 for stability
-            subsample=0.8,
-            colsample_bytree=0.8,
-            colsample_bylevel=0.8,
-            scale_pos_weight=pos_weight,  # Reintroduced for class imbalance
-            min_child_weight=1,
-            gamma=0,
-            reg_alpha=0.1,  # L1 regularization
-            reg_lambda=1.0,  # L2 regularization
-            random_state=42,
-            n_jobs=-1,
-            eval_metric='aucpr'  # Optimize for average precision (better for imbalanced)
-        ),
         'lightgbm': LGBMClassifier(
-            n_estimators=500,  # Increased from 300
-            max_depth=5,  # Reduced from 6
-            learning_rate=0.03,  # Reduced from 0.05
+            n_estimators=300,
+            max_depth=5,
+            learning_rate=0.05,
             subsample=0.8,
             colsample_bytree=0.8,
             min_child_samples=5,
             num_leaves=31,
-            scale_pos_weight=pos_weight,  # Class weight
+            scale_pos_weight=pos_weight,
             reg_alpha=0.1,
             reg_lambda=1.0,
             random_state=42,
             n_jobs=-1,
             verbose=-1
-        ),
-        'catboost': CatBoostClassifier(
-            iterations=300,
-            depth=6,
-            learning_rate=0.03,
-            scale_pos_weight=pos_weight,  # Handles class imbalance
-            eval_metric='AUC',
-            random_seed=42,
-            thread_count=-1,
-            verbose=0                    # Silent training
-        ),
+        )
     }
 
 
@@ -200,41 +165,17 @@ def train_pipeline_optimized(data_path: str):
         # Find optimal threshold (favor recall for safety: F2 score)
         optimal_t, _ = find_optimal_threshold(y_test, y_proba, f_beta=2.0)
         all_metrics.append(evaluate_model(clf, X_test_s, y_test, name, threshold=optimal_t))
-        
-        # Store for ensemble
-        if name == 'xgboost':
-            y_proba_ensemble = y_proba
 
-    print("\n[STEP 8] Building Weighted Voting Ensemble...")
-    ensemble = VotingClassifier(
-        estimators=[
-            ('xgb', trained['xgboost']),
-            ('lgbm', trained['lightgbm']),
-            ('catboost', trained['catboost']),
-        ],
-        voting='soft',
-        weights=[3, 2, 1]  # XGBoost gets highest weight
-    )
-    ensemble.fit(X_train_res, y_train_res)
-    
-    # Threshold tuning for ensemble
-    y_proba_ens = ensemble.predict_proba(X_test_s)[:, 1]
-    optimal_t_ens, _ = find_optimal_threshold(y_test, y_proba_ens, f_beta=2.0)
-    all_metrics.append(evaluate_model(ensemble, X_test_s, y_test, 'voting_ensemble', threshold=optimal_t_ens))
-
-    print("\n[STEP 9] Selecting best model by Average Precision...")
+    print("\n[STEP 8] Selecting best model...")
     best_m = max(all_metrics, key=lambda m: m['avg_precision'])
-    best_clf = ensemble if best_m['model'] == 'voting_ensemble' else trained[best_m['model']]
+    best_clf = trained[best_m['model']]
     best_threshold = best_m['threshold']
     print(f"  Best: {best_m['model']} (threshold={best_threshold})  Avg-Precision={best_m['avg_precision']}")
 
     # Save artifacts
     joblib.dump(best_clf, os.path.join(ARTIFACTS_DIR, 'best_model.pkl'))
     joblib.dump(best_threshold, os.path.join(ARTIFACTS_DIR, 'best_threshold.pkl'))
-    joblib.dump(trained['xgboost'], os.path.join(ARTIFACTS_DIR, 'xgboost.pkl'))
     joblib.dump(trained['lightgbm'], os.path.join(ARTIFACTS_DIR, 'lightgbm.pkl'))
-    joblib.dump(trained['catboost'], os.path.join(ARTIFACTS_DIR, 'catboost.pkl'))
-    joblib.dump(ensemble, os.path.join(ARTIFACTS_DIR, 'ensemble.pkl'))
     print(f"  Artifacts saved → {ARTIFACTS_DIR}/")
 
     # Save evaluation report
@@ -243,7 +184,7 @@ def train_pipeline_optimized(data_path: str):
 
     # Save feature importances
     feat_imp = pd.Series(
-        trained['xgboost'].feature_importances_,
+        trained['lightgbm'].feature_importances_,
         index=X_train_s.columns
     ).sort_values(ascending=False)
     feat_imp.to_csv(os.path.join(REPORTS_DIR, 'feature_importances.csv'))
