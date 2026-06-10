@@ -119,7 +119,7 @@ class MuleDetectorOptimized:
         
         # Anomaly score using cached isolation forest
         scores = -self._iso_forest.score_samples(X_transformed)
-        iso_score = float((scores - scores.min()) / (scores.max() - scores.min() + 1e-8)[0]) if len(scores) > 0 else 0.0
+        iso_score = float(((scores - scores.min()) / (scores.max() - scores.min() + 1e-8))[0]) if len(scores) > 0 else 0.0
         
         # Composite scoring with blended anomaly
         composite = (1 - iso_weight) * ml_prob + iso_weight * iso_score
