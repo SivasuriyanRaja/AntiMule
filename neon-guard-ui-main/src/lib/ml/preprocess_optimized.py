@@ -88,6 +88,9 @@ def select_and_clean_features(df: pd.DataFrame, top_n_variance: int = 150):
     """Optimized feature selection with better handling."""
     df = df.copy()
     
+    if TARGET not in df.columns:
+        raise ValueError(f"Target column '{TARGET}' missing. A labeled dataset is required for training.")
+        
     # Drop high-missing columns
     missing_rate = df.isnull().mean()
     high_missing = missing_rate[missing_rate > 0.80].index.tolist()

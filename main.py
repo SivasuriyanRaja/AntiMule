@@ -146,8 +146,11 @@ async def train(file: UploadFile = File(...)):
                 if hasattr(get_detector, '_instance'):
                     delattr(get_detector, '_instance')
                     log_q.put("[INFO] Model cache cleared. Next prediction will load the new model.")
-            except Exception:
-                log_q.put(f"[ERROR] {traceback.format_exc()}")
+            except Exception as e:
+                if isinstance(e, ValueError):
+                    log_q.put(f"[ERROR] {str(e)}")
+                else:
+                    log_q.put(f"[ERROR] {traceback.format_exc()}")
             finally:
                 sys.stdout = old_out
                 done_flag.set()
