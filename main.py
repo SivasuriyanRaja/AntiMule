@@ -206,6 +206,7 @@ async def predict_batch(file: UploadFile = File(...), current_user: dict = Depen
         detector = get_detector()
         results  = detector.predict_batch(df)
 
+        # pyrefly: ignore [unnecessary-type-conversion]
         mule_count = int((results["prediction"] == 1).sum())
         scan_id    = str(uuid.uuid4())
 
@@ -225,6 +226,7 @@ async def predict_batch(file: UploadFile = File(...), current_user: dict = Depen
                 "total":      len(results),
                 "mule_count": mule_count,
                 "mule_pct":   round(100 * mule_count / max(len(results), 1), 2),
+                # pyrefly: ignore [unnecessary-type-conversion]
                 "avg_risk":   round(float(results["risk_score"].mean()), 2),
             },
             "predictions": results.head(200).to_dict(orient="records"),
