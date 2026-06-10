@@ -262,7 +262,7 @@ function Score() {
                     const max = Math.max(
                       ...Object.values(result.shap_values).map((v: any) => Math.abs(v))
                     );
-                    const pct = Math.round((abs / max) * 100);
+                    const pct = max > 0 ? Math.round((abs / max) * 100) : 0;
                     return (
                       <div key={idx} className="space-y-1">
                         <div className="flex justify-between text-xs">

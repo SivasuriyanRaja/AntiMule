@@ -138,6 +138,26 @@ class MuleDetectorOptimized:
         # Generate alerts
         alerts = self._generate_alerts(row_dict, composite, ml_prob, iso_score)
         
+        # Generate pseudo-SHAP values for explanation
+        shap_values = {}
+        try:
+            importances = None
+            if hasattr(model, 'estimators_'):
+                for est in model.estimators_:
+                    if hasattr(est, 'feature_importances_'):
+                        importances = est.feature_importances_
+                        break
+            elif hasattr(model, 'feature_importances_'):
+                importances = model.feature_importances_
+                
+            if importances is not None:
+                local_contribs = importances * X_transformed[0]
+                for i, col in enumerate(self._feature_cols):
+                    shap_values[col] = float(local_contribs[i])
+                shap_values = dict(sorted(shap_values.items(), key=lambda x: abs(x[1]), reverse=True))
+        except Exception as e:
+            logger.warning(f"Could not generate SHAP values: {e}")
+            
         return {
             'ml_probability': round(ml_prob, 4),
             'anomaly_score': round(iso_score, 4),
@@ -149,6 +169,7 @@ class MuleDetectorOptimized:
             'prediction_label': 'SUSPICIOUS (MULE)' if prediction == 1 else 'LEGITIMATE',
             'confidence': round(abs(composite - 0.5) * 2, 4),  # 0-1 confidence
             'alerts': alerts,
+            'shap_values': shap_values,
         }
     
     def predict_batch(self, df: pd.DataFrame, iso_weight: float = 0.20) -> pd.DataFrame:
