@@ -194,7 +194,9 @@ function Insights() {
                   <XAxis type="number" tick={{ fontSize: 11, fill: "oklch(0.60 0.015 245)" }} axisLine={false} tickLine={false} />
                   <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: "oklch(0.60 0.015 245)", fontFamily: "JetBrains Mono, monospace" }} axisLine={false} tickLine={false} width={80} />
                   <Tooltip
-                    contentStyle={{ background: "oklch(0.16 0.028 245)", border: "1px solid oklch(0.28 0.025 245 / 0.70)", borderRadius: 10, fontSize: 12 }}
+                    contentStyle={{ background: "oklch(0.16 0.028 245)", border: "1px solid oklch(0.28 0.025 245 / 0.70)", borderRadius: 10, fontSize: 12, color: "oklch(0.95 0.008 55)" }}
+                    itemStyle={{ color: "oklch(0.95 0.008 55)" }}
+                    labelStyle={{ color: "oklch(0.95 0.008 55)" }}
                     formatter={(v: any) => [v.toFixed(4), "Importance"]}
                   />
                   <Bar dataKey="value" name="Importance" fill="oklch(0.76 0.13 72 / 0.80)" radius={[0, 4, 4, 0]} />
@@ -235,7 +237,9 @@ function Insights() {
                     strokeWidth={2}
                   />
                   <Tooltip
-                    contentStyle={{ background: "oklch(0.16 0.028 245)", border: "1px solid oklch(0.28 0.025 245 / 0.70)", borderRadius: 10, fontSize: 12 }}
+                    contentStyle={{ background: "oklch(0.16 0.028 245)", border: "1px solid oklch(0.28 0.025 245 / 0.70)", borderRadius: 10, fontSize: 12, color: "oklch(0.95 0.008 55)" }}
+                    itemStyle={{ color: "oklch(0.95 0.008 55)" }}
+                    labelStyle={{ color: "oklch(0.95 0.008 55)" }}
                     formatter={(v: any) => [`${v}%`, "Score"]}
                   />
                 </RadarChart>

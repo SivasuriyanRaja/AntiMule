@@ -216,7 +216,10 @@ function Overview() {
                     border: "1px solid oklch(0.28 0.025 245 / 0.70)",
                     borderRadius: 10,
                     fontSize: 12,
+                    color: "oklch(0.95 0.008 55)",
                   }}
+                  itemStyle={{ color: "oklch(0.95 0.008 55)" }}
+                  labelStyle={{ color: "oklch(0.95 0.008 55)" }}
                 />
                 <Bar dataKey="screened" name="Screened" fill="oklch(0.40 0.06 245 / 0.60)" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="flagged" name="Flagged" fill="oklch(0.76 0.13 72 / 0.80)" radius={[4, 4, 0, 0]} />
@@ -257,7 +260,10 @@ function Overview() {
                           border: "1px solid oklch(0.28 0.025 245 / 0.70)",
                           borderRadius: 10,
                           fontSize: 12,
+                          color: "oklch(0.95 0.008 55)",
                         }}
+                        itemStyle={{ color: "oklch(0.95 0.008 55)" }}
+                        labelStyle={{ color: "oklch(0.95 0.008 55)" }}
                       />
                     </PieChart>
                   </ResponsiveContainer>

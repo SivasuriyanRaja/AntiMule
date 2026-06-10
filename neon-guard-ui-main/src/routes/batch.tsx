@@ -213,7 +213,7 @@ function Batch() {
                   <Pie data={distribution} dataKey="value" nameKey="name" innerRadius={50} outerRadius={82} paddingAngle={2}>
                     {distribution.map((d) => <Cell key={d.name} fill={d.color} stroke="oklch(0.18 0.018 260)" strokeWidth={3} />)}
                   </Pie>
-                  <Tooltip contentStyle={{ background: "oklch(0.22 0.02 260)", border: "1px solid oklch(1 0 0 / 0.08)", borderRadius: 10, fontSize: 12 }} />
+                  <Tooltip contentStyle={{ background: "oklch(0.16 0.028 245)", border: "1px solid oklch(0.28 0.025 245 / 0.70)", borderRadius: 10, fontSize: 12, color: "oklch(0.95 0.008 55)" }} itemStyle={{ color: "oklch(0.95 0.008 55)" }} labelStyle={{ color: "oklch(0.95 0.008 55)" }} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
@@ -235,7 +235,7 @@ function Batch() {
                   <CartesianGrid stroke="oklch(1 0 0 / 0.05)" vertical={false} />
                   <XAxis dataKey="bucket" stroke="oklch(0.7 0.02 260)" fontSize={10} />
                   <YAxis stroke="oklch(0.7 0.02 260)" fontSize={10} />
-                  <Tooltip contentStyle={{ background: "oklch(0.22 0.02 260)", border: "1px solid oklch(1 0 0 / 0.08)", borderRadius: 10, fontSize: 12 }} />
+                  <Tooltip contentStyle={{ background: "oklch(0.16 0.028 245)", border: "1px solid oklch(0.28 0.025 245 / 0.70)", borderRadius: 10, fontSize: 12, color: "oklch(0.95 0.008 55)" }} itemStyle={{ color: "oklch(0.95 0.008 55)" }} labelStyle={{ color: "oklch(0.95 0.008 55)" }} />
                   <Bar dataKey="count" fill="var(--color-primary)" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
