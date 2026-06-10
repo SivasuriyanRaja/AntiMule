@@ -1,10 +1,13 @@
 {
-  "buildCommand": "cd neon-guard-ui-main && npm install && npm run build",
+  "buildCommand": "npm run build",
   "outputDirectory": "neon-guard-ui-main/dist",
   "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
+    { "source": "/health", "destination": "/api/index.py" },
+    { "source": "/train", "destination": "/api/index.py" },
+    { "source": "/predict(.*)", "destination": "/api/index.py" },
+    { "source": "/db(.*)", "destination": "/api/index.py" },
+    { "source": "/auth(.*)", "destination": "/api/index.py" },
+    { "source": "/model(.*)", "destination": "/api/index.py" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

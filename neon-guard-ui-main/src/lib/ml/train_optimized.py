@@ -21,10 +21,12 @@ from sklearn.metrics import (
     classification_report, confusion_matrix, roc_auc_score,
     average_precision_score, f1_score, precision_score, recall_score, roc_curve
 )
-from sklearn.ensemble import VotingClassifier
-from catboost import CatBoostClassifier
-from xgboost import XGBClassifier
-from lightgbm import LGBMClassifier
+from sklearn.ensemble import (
+    VotingClassifier,
+    RandomForestClassifier,
+    HistGradientBoostingClassifier,
+    GradientBoostingClassifier
+)
 from imblearn.over_sampling import SMOTE
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -43,48 +45,27 @@ def build_models_optimized(class_weight: float = 1.5) -> dict:
     class_weight: higher = more weight to positive (mule) class.
     """
     pos_weight = class_weight
-    
     return {
-        'xgboost': XGBClassifier(
-            n_estimators=500,
-            max_depth=5,
+        'xgboost': HistGradientBoostingClassifier(
+            max_iter=300,
             learning_rate=0.03,
-            subsample=0.8,
-            colsample_bytree=0.8,
-            colsample_bylevel=0.8,
-            scale_pos_weight=pos_weight,
-            min_child_weight=1,
-            gamma=0,
-            reg_alpha=0.1,
-            reg_lambda=1.0,
-            random_state=42,
-            n_jobs=-1,
-            eval_metric='aucpr'
+            max_depth=5,
+            l2_regularization=0.1,
+            random_state=42
         ),
-        'lightgbm': LGBMClassifier(
+        'lightgbm': GradientBoostingClassifier(
             n_estimators=300,
-            max_depth=5,
             learning_rate=0.05,
+            max_depth=5,
             subsample=0.8,
-            colsample_bytree=0.8,
-            min_child_samples=5,
-            num_leaves=31,
-            scale_pos_weight=pos_weight,
-            reg_alpha=0.1,
-            reg_lambda=1.0,
-            random_state=42,
-            n_jobs=-1,
-            verbose=-1
+            random_state=42
         ),
-        'catboost': CatBoostClassifier(
-            iterations=300,
-            depth=6,
-            learning_rate=0.03,
-            scale_pos_weight=pos_weight,
-            eval_metric='AUC',
-            random_seed=42,
-            thread_count=-1,
-            verbose=0
+        'catboost': RandomForestClassifier(
+            n_estimators=300,
+            max_depth=6,
+            class_weight={0: 1, 1: pos_weight},
+            n_jobs=-1,
+            random_state=42
         )
     }
 
@@ -238,12 +219,13 @@ def train_pipeline_optimized(data_path: str):
     with open(os.path.join(REPORTS_DIR, 'evaluation_metrics.json'), 'w') as f:
         json.dump(all_metrics, f, indent=2)
 
-    # Save feature importances
-    feat_imp = pd.Series(
-        trained['xgboost'].feature_importances_,
-        index=X_train_s.columns
-    ).sort_values(ascending=False)
-    feat_imp.to_csv(os.path.join(REPORTS_DIR, 'feature_importances.csv'))
+    # Save feature importances (RandomForest provides this easily)
+    if hasattr(trained['catboost'], 'feature_importances_'):
+        feat_imp = pd.Series(
+            trained['catboost'].feature_importances_,
+            index=X_train_s.columns
+        ).sort_values(ascending=False)
+        feat_imp.to_csv(os.path.join(REPORTS_DIR, 'feature_importances.csv'))
     print(f"  Reports saved → {REPORTS_DIR}/")
 
     print("\n[DONE] Optimized training pipeline complete.\n")
