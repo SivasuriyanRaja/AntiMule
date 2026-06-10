@@ -88,17 +88,27 @@ def select_and_clean_features(df: pd.DataFrame, top_n_variance: int = 150):
     """Optimized feature selection with better handling."""
     df = df.copy()
     
-    if TARGET not in df.columns:
-        raise ValueError(f"Target column '{TARGET}' missing. A labeled dataset is required for training.")
+    target_col = TARGET
+    if target_col not in df.columns:
+        possible_targets = ['F3924', 'target', 'Target', 'Class', 'class', 'label', 'Label', 'is_mule', 'isFraud', 'fraud', 'Fraud', 'prediction', 'Prediction']
+        for pt in possible_targets:
+            if pt in df.columns:
+                target_col = pt
+                break
+                
+        if target_col not in df.columns:
+            raise ValueError(f"Target column missing. A labeled dataset is required for training. Please include one of: {', '.join(possible_targets)}")
         
     # Drop high-missing columns
     missing_rate = df.isnull().mean()
     high_missing = missing_rate[missing_rate > 0.80].index.tolist()
+    if target_col in high_missing:
+        high_missing.remove(target_col)
     df.drop(columns=high_missing, inplace=True, errors='ignore')
     print(f"[INFO] Dropped {len(high_missing)} columns with >80% missing")
 
-    y = df[TARGET].copy()
-    X = df.drop(columns=[TARGET], errors='ignore')
+    y = df[target_col].copy()
+    X = df.drop(columns=[target_col], errors='ignore')
     X = X.select_dtypes(include=[np.number])
 
     # Feature prioritization
