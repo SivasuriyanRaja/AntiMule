@@ -115,11 +115,17 @@ class MuleDetectorOptimized:
         X_transformed = self._scaler.transform(X_imp)
         
         # Predictions (vectorized)
-        ml_prob = float(model.predict_proba(X_transformed)[0][1])
+        probs = np.atleast_1d(model.predict_proba(X_transformed))
+        # Handle case where predict_proba returns 1D array vs 2D array
+        ml_prob = float(probs[1] if probs.ndim == 1 else probs[0][1])
         
         # Anomaly score using cached isolation forest
-        scores = -self._iso_forest.score_samples(X_transformed)
-        iso_score = float(((scores - scores.min()) / (scores.max() - scores.min() + 1e-8))[0]) if len(scores) > 0 else 0.0
+        scores = np.atleast_1d(-self._iso_forest.score_samples(X_transformed))
+        if len(scores) > 0:
+            norm_scores = (scores - np.min(scores)) / (np.max(scores) - np.min(scores) + 1e-8)
+            iso_score = float(norm_scores[0])
+        else:
+            iso_score = 0.0
         
         # Composite scoring with blended anomaly
         composite = (1 - iso_weight) * ml_prob + iso_weight * iso_score
@@ -171,7 +177,8 @@ class MuleDetectorOptimized:
         X_transformed = self._scaler.transform(X_imp)
         
         # Vectorized predictions
-        ml_probs = model.predict_proba(X_transformed)[:, 1]
+        probs = np.atleast_2d(model.predict_proba(X_transformed))
+        ml_probs = probs[:, 1]
         
         # Anomaly score using cached isolation forest
         scores = -self._iso_forest.score_samples(X_transformed)

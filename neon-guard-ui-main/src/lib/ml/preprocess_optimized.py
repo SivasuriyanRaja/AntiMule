@@ -164,7 +164,9 @@ def transform_new_data(df: pd.DataFrame, artifacts_dir: str = 'models') -> np.nd
     return pd.DataFrame(X_scaled, columns=feature_cols)
 
 
-def fit_isolation_forest(X_train: pd.DataFrame | np.ndarray, artifacts_dir: str = 'models', contamination: float = 0.01):
+from typing import Union
+
+def fit_isolation_forest(X_train: Union[pd.DataFrame, np.ndarray], artifacts_dir: str = 'models', contamination: float = 0.01):
     """Fit Isolation Forest for anomaly detection."""
     os.makedirs(artifacts_dir, exist_ok=True)
     iso_forest = IsolationForest(contamination=contamination, random_state=42, n_jobs=-1)
