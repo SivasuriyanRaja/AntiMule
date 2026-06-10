@@ -31,7 +31,7 @@ export function AuthShell({ children }: { children: ReactNode }) {
             <Building2 className="h-5 w-5 text-primary-foreground" />
           </div>
           <div>
-            <div className="font-display text-lg font-semibold text-foreground">BankGuard AML</div>
+            <div className="font-display text-lg font-semibold text-foreground">AntiMule Bank</div>
             <div className="text-[10px] text-muted-foreground uppercase tracking-widest">Compliance Workstation</div>
           </div>
         </div>
@@ -88,7 +88,7 @@ export function AuthShell({ children }: { children: ReactNode }) {
             <Building2 className="h-5 w-5 text-primary-foreground" />
           </div>
           <div>
-            <div className="font-display text-lg font-semibold">BankGuard AML</div>
+            <div className="font-display text-lg font-semibold">AntiMule Bank</div>
             <div className="text-[10px] text-muted-foreground uppercase tracking-widest">Compliance Workstation</div>
           </div>
         </div>

@@ -89,7 +89,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
             <div>
               <div className="font-display text-base font-semibold text-foreground tracking-tight">
-                BankGuard AML
+                AntiMule Bank
               </div>
               <div className="text-[10px] text-muted-foreground uppercase tracking-widest mt-0.5">
                 Compliance Workstation
