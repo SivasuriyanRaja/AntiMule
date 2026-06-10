@@ -14,44 +14,7 @@ function formatSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-function hashScore(values: string[], idx: number): number {
-  let h = idx * 31 + 17;
-  for (const v of values) {
-    for (let j = 0; j < v.length && j < 20; j++) {
-      h = ((h * 31) + v.charCodeAt(j)) >>> 0;
-    }
-  }
-  return (h % 100) / 100;
-}
-
-function Batch() {
-  const [headers, setHeaders] = useState<string[]>(() => { const s = localStorage.getItem("batch_headers"); return s ? JSON.parse(s) : []; });
-  const [rows, setRows] = useState<string[][]>(() => { const s = localStorage.getItem("batch_rows"); return s ? JSON.parse(s) : []; });
-  const [scores, setScores] = useState<number[]>(() => { const s = localStorage.getItem("batch_scores"); return s ? JSON.parse(s) : []; });
-  const [fileName, setFileName] = useState(() => localStorage.getItem("batch_fileName") || "");
-  const [fileSize, setFileSize] = useState(() => localStorage.getItem("batch_fileSize") || "");
-  const [totalEst, setTotalEst] = useState(() => { const s = localStorage.getItem("batch_totalEst"); return s ? JSON.parse(s) : 0; });
-  const [fileError, setFileError] = useState("");
-  const [isDragging, setIsDragging] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  React.useEffect(() => {
-    localStorage.setItem("batch_headers", JSON.stringify(headers));
-    localStorage.setItem("batch_rows", JSON.stringify(rows));
-    localStorage.setItem("batch_scores", JSON.stringify(scores));
-    localStorage.setItem("batch_fileName", fileName);
-    localStorage.setItem("batch_fileSize", fileSize);
-    localStorage.setItem("batch_totalEst", JSON.stringify(totalEst));
-  }, [headers, rows, scores, fileName, fileSize, totalEst]);
-
-  function handleReset() {
-    setHeaders([]); setRows([]); setScores([]); setFileName(""); setFileSize(""); setTotalEst(0); setFileError("");
-    localStorage.removeItem("batch_headers"); localStorage.removeItem("batch_rows"); localStorage.removeItem("batch_scores");
-    localStorage.removeItem("batch_fileName"); localStorage.removeItem("batch_fileSize"); localStorage.removeItem("batch_totalEst");
-  }
-
-  function processFile(file: File) {
+  async function processFile(file: File) {
     setLoading(true);
     setFileError("");
     setHeaders([]);
@@ -67,33 +30,49 @@ function Batch() {
       return;
     }
 
-    const blob = file.slice(0, 262144); // 256 KB
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const text = String(e.target?.result ?? "");
-        const lines = text.split(/\r?\n/).filter((l) => l.trim());
-        if (lines.length < 2) { setFileError("File must have a header row and at least one data row."); setLoading(false); return; }
-        const hdrs = lines[0].split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
-        const dataLines = lines.slice(1, 201);
-        const avgLen = dataLines.length ? dataLines.reduce((s, l) => s + l.length + 1, 0) / dataLines.length : 60;
-        const est = Math.max(0, Math.round((file.size - lines[0].length) / avgLen));
-        const parsedRows = dataLines.map((line) => line.split(",").map((v) => v.trim().replace(/^"|"$/g, "")));
-        const sc = parsedRows.map((r, i) => hashScore(r, i));
-        // sort by score descending
-        const order = sc.map((s, i) => ({ s, i })).sort((a, b) => b.s - a.s);
-        setHeaders(hdrs);
-        setRows(order.map((o) => parsedRows[o.i]));
-        setScores(order.map((o) => o.s));
-        setTotalEst(est);
-        if (hdrs.length === 0) setFileError("No columns detected. Check the file has a header row.");
-      } catch {
-        setFileError("Could not parse file. Make sure it is a valid CSV.");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("http://localhost:8005/predict/batch", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
+        },
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || data.status !== "success") {
+        setFileError(data.detail || "Backend error.");
+        setLoading(false);
+        return;
       }
+
+      const preds = data.predictions || [];
+      if (preds.length === 0) {
+        setFileError("No predictions returned by model.");
+        setLoading(false);
+        return;
+      }
+
+      const mlCols = new Set(["ml_probability", "anomaly_score", "composite_probability", "risk_score", "risk_tier", "prediction", "prediction_label", "confidence"]);
+      const hdrs = Object.keys(preds[0]).filter(k => !mlCols.has(k));
+      
+      const newRows = preds.map((p: any) => hdrs.map(h => String(p[h] ?? "")));
+      // Using composite_probability directly for 'scores' (which expects 0-1)
+      const newScores = preds.map((p: any) => Number(p.composite_probability || 0));
+
+      setHeaders(hdrs);
+      setRows(newRows);
+      setScores(newScores);
+      setTotalEst(data.summary?.total || preds.length);
+    } catch (e: any) {
+      setFileError("Failed to read file or connect to backend.");
+    } finally {
       setLoading(false);
-    };
-    reader.onerror = () => { setFileError("Failed to read file."); setLoading(false); };
-    reader.readAsText(blob);
+    }
   }
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
