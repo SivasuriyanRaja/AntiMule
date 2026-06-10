@@ -17,6 +17,10 @@ import numpy as np
 import pandas as pd
 import joblib
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import (
+    classification_report, confusion_matrix, roc_auc_score,
+    average_precision_score, f1_score, precision_score, recall_score, roc_curve
+)
 from lightgbm import LGBMClassifier
 from imblearn.over_sampling import SMOTE
 
