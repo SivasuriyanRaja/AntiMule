@@ -3,6 +3,7 @@ import { AuthShell } from "@/components/antimule/AuthShell";
 import { GlassCard, Btn } from "@/components/antimule/primitives";
 import { useState } from "react";
 import { Loader2, AlertCircle, Eye, EyeOff } from "lucide-react";
+import { API_BASE_URL } from "@/lib/utils";
 
 export const Route = createFileRoute("/login")({
   component: Login,
@@ -22,7 +23,7 @@ function Login() {
     setError(null);
 
     try {
-      const res = await fetch("http://localhost:8005/auth/login", {
+      const res = await fetch(`${API_BASE_URL}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),

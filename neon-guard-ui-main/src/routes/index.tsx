@@ -23,6 +23,7 @@ import {
   ArrowRight,
   Users,
 } from "lucide-react";
+import { API_BASE_URL } from "@/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
@@ -42,7 +43,7 @@ export const Route = createFileRoute("/")({
   component: Overview,
 });
 
-const API_BASE = "http://localhost:8005";
+const API_BASE = API_BASE_URL;
 
 interface FeatureImportance {
   feature: string;

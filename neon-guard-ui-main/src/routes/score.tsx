@@ -17,6 +17,7 @@ import {
   Clock,
   ShieldAlert,
 } from "lucide-react";
+import { API_BASE_URL } from "@/lib/utils";
 import { useState, useEffect } from "react";
 
 export const Route = createFileRoute("/score")({
@@ -61,7 +62,7 @@ function Score() {
   const [caseCreated, setCaseCreated] = useState(false);
 
   useEffect(() => {
-    fetch("http://localhost:8005/model/features")
+    fetch(`${API_BASE_URL}/model/features`)
       .then(res => res.json())
       .then(data => {
         if (data.available && data.features) {
@@ -103,7 +104,7 @@ function Score() {
         payload[k] = isNaN(num) ? v : num;
       });
 
-      const res = await fetch("http://localhost:8005/predict", {
+      const res = await fetch(`${API_BASE_URL}/predict`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${localStorage.getItem("auth_token")}`,

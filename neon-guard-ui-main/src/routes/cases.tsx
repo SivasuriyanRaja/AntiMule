@@ -22,6 +22,7 @@ import {
   Clock,
   AlertTriangle,
 } from "lucide-react";
+import { API_BASE_URL } from "@/lib/utils";
 
 export const Route = createFileRoute("/cases")({
   component: Cases,
@@ -306,7 +307,7 @@ function Cases() {
   const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
-    fetch("http://localhost:8005/db/alerts", {
+    fetch(`${API_BASE_URL}/db/alerts`, {
       headers: { Authorization: `Bearer ${localStorage.getItem("auth_token")}` }
     })
       .then(res => res.json())

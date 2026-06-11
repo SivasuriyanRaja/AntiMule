@@ -11,6 +11,7 @@ import {
   Download,
   TrendingUp,
 } from "lucide-react";
+import { API_BASE_URL } from "@/lib/utils";
 import {
   ResponsiveContainer,
   BarChart,
@@ -25,7 +26,7 @@ import {
   Radar,
 } from "recharts";
 
-const API_BASE = "http://localhost:8005";
+const API_BASE = API_BASE_URL;
 
 interface FeatureImportance {
   feature: string;

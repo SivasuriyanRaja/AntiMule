@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/antimule/AppShell";
 import { Btn, GlassCard, Pill, SectionHeader } from "@/components/antimule/primitives";
 import { Download, FileUp, Filter, CheckCircle2, XCircle, TableProperties } from "lucide-react";
+import { API_BASE_URL } from "@/lib/utils";
 import React, { useState, useRef } from "react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip, Bar, BarChart, XAxis, YAxis, CartesianGrid } from "recharts";
 
@@ -61,7 +62,7 @@ function Batch() {
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch("http://localhost:8005/predict/batch", {
+      const res = await fetch(`${API_BASE_URL}/predict/batch`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
