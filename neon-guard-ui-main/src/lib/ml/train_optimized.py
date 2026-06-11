@@ -35,8 +35,12 @@ from preprocess_optimized import (
     impute_and_scale, fit_isolation_forest
 )
 
-ARTIFACTS_DIR = os.path.join(os.path.dirname(__file__), '..', 'models')
-REPORTS_DIR = os.path.join(os.path.dirname(__file__), '..', 'reports')
+if os.environ.get("VERCEL"):
+    ARTIFACTS_DIR = "/tmp/models"
+    REPORTS_DIR = "/tmp/reports"
+else:
+    ARTIFACTS_DIR = os.path.join(os.path.dirname(__file__), '..', 'models')
+    REPORTS_DIR = os.path.join(os.path.dirname(__file__), '..', 'reports')
 
 
 def build_models_optimized(class_weight: float = 1.5) -> dict:

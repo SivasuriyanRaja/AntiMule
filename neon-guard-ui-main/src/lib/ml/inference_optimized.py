@@ -18,8 +18,13 @@ import logging
 sys.path.insert(0, os.path.dirname(__file__))
 from preprocess_optimized import engineer_features, transform_new_data, isolation_anomaly_scores
 
-ARTIFACTS_DIR = os.path.join(os.path.dirname(__file__), '..', 'models')
+def get_artifacts_dir():
+    tmp_dir = "/tmp/models"
+    if os.environ.get("VERCEL") and os.path.exists(tmp_dir) and os.path.exists(os.path.join(tmp_dir, 'best_model.pkl')):
+        return tmp_dir
+    return os.path.join(os.path.dirname(__file__), '..', 'models')
 
+ARTIFACTS_DIR = get_artifacts_dir()
 # Risk tier configuration
 RISK_TIERS = {
     (0.00, 0.25): ('LOW', '#27ae60'),

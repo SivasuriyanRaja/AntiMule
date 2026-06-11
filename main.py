@@ -295,7 +295,7 @@ async def db_alerts(limit: int = Query(default=20, le=100), current_user: dict =
 @app.get("/model/metrics")
 async def model_metrics():
     """Returns training evaluation metrics from the latest run."""
-    reports_dir = os.path.join(_ROOT, "neon-guard-ui-main", "src", "lib", "reports")
+    reports_dir = "/tmp/reports" if (os.environ.get("VERCEL") and os.path.exists("/tmp/reports/evaluation_metrics.json")) else os.path.join(_ROOT, "neon-guard-ui-main", "src", "lib", "reports")
     metrics_file = os.path.join(reports_dir, "evaluation_metrics.json")
     if not os.path.exists(metrics_file):
         return {"available": False, "reason": "No model trained yet"}
@@ -309,7 +309,7 @@ async def model_metrics():
 @app.get("/model/feature-importance")
 async def model_feature_importance():
     """Returns top feature importances from the latest run."""
-    reports_dir = os.path.join(_ROOT, "neon-guard-ui-main", "src", "lib", "reports")
+    reports_dir = "/tmp/reports" if (os.environ.get("VERCEL") and os.path.exists("/tmp/reports/feature_importances.csv")) else os.path.join(_ROOT, "neon-guard-ui-main", "src", "lib", "reports")
     importances_file = os.path.join(reports_dir, "feature_importances.csv")
     if not os.path.exists(importances_file):
         return {"available": False, "reason": "No model trained yet"}
@@ -329,7 +329,7 @@ async def model_feature_importance():
 @app.get("/model/features")
 async def model_features():
     """Returns the expected feature columns for the trained model."""
-    artifacts_dir = os.path.join(_ROOT, "neon-guard-ui-main", "src", "lib", "models")
+    artifacts_dir = "/tmp/models" if (os.environ.get("VERCEL") and os.path.exists("/tmp/models/feature_cols.pkl")) else os.path.join(_ROOT, "neon-guard-ui-main", "src", "lib", "models")
     features_file = os.path.join(artifacts_dir, "feature_cols.pkl")
     if not os.path.exists(features_file):
         return {"available": False, "reason": "No model trained yet"}
