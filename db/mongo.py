@@ -231,9 +231,9 @@ def ensure_indexes():
     db.batch_scans.create_index([("created_at", DESCENDING)])
     print("[MongoDB] Indexes created.")
 
-async def async_create_user(email: str, password_hash: str) -> dict:
+async def async_create_user(email: str, password_hash: str, name: str = None) -> dict:
     db = get_async_db()
-    doc = {'email': email, 'password_hash': password_hash, 'created_at': datetime.now(timezone.utc).isoformat()}
+    doc = {'email': email, 'password_hash': password_hash, 'name': name, 'created_at': datetime.now(timezone.utc).isoformat()}
     try:
         res = await db.users.insert_one(doc)
         doc['id'] = str(res.inserted_id)
@@ -248,9 +248,9 @@ async def async_get_user_by_email(email: str) -> dict:
         doc['id'] = str(doc.pop('_id'))
     return doc
 
-def create_user(email: str, password_hash: str) -> dict:
+def create_user(email: str, password_hash: str, name: str = None) -> dict:
     db = get_sync_db()
-    doc = {'email': email, 'password_hash': password_hash, 'created_at': datetime.now(timezone.utc).isoformat()}
+    doc = {'email': email, 'password_hash': password_hash, 'name': name, 'created_at': datetime.now(timezone.utc).isoformat()}
     try:
         res = db.users.insert_one(doc)
         doc['id'] = str(res.inserted_id)

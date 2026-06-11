@@ -154,8 +154,10 @@ class _Router:
                 user = await loop.run_in_executor(None, self._mysql.create_user, email, password_hash, name)
             except Exception as e:
                 if not user: raise e
+        elif self._mongo:
+            user = await self._mongo.async_create_user(email, password_hash, name)
         else:
-            raise Exception("MySQL is required for User authentication but it is not initialized.")
+            raise Exception("No database backend is initialized for User authentication.")
         return user
 
     async def async_get_user_by_email(self, email: str) -> dict:
@@ -166,9 +168,11 @@ class _Router:
                 if user: return user
             except Exception:
                 pass
-        else:
-            raise Exception("MySQL is required for User authentication but it is not initialized.")
-        return None
+        elif self._mongo:
+            user = await self._mongo.async_get_user_by_email(email)
+            if user: return user
+        
+        raise Exception("No database backend is initialized for User authentication.")
 
 
 # Singleton — import this everywhere
