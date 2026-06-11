@@ -1,12 +1,25 @@
 {
-  "buildCommand": "cd neon-guard-ui-main && npm install && npm run build",
-  "outputDirectory": "neon-guard-ui-main/dist",
-  "rewrites": [
-    { "source": "/health", "destination": "/api/index.py" },
-    { "source": "/train", "destination": "/api/index.py" },
-    { "source": "/predict(.*)", "destination": "/api/index.py" },
-    { "source": "/db(.*)", "destination": "/api/index.py" },
-    { "source": "/auth(.*)", "destination": "/api/index.py" },
-    { "source": "/model(.*)", "destination": "/api/index.py" }
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "neon-guard-ui-main/dist"
+      }
+    },
+    {
+      "src": "api/index.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    { "src": "/health", "dest": "/api/index.py" },
+    { "src": "/train", "dest": "/api/index.py" },
+    { "src": "/predict(.*)", "dest": "/api/index.py" },
+    { "src": "/db(.*)", "dest": "/api/index.py" },
+    { "src": "/auth(.*)", "dest": "/api/index.py" },
+    { "src": "/model(.*)", "dest": "/api/index.py" },
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
