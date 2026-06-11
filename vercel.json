@@ -1,5 +1,4 @@
 {
-  "framework": "vite",
   "buildCommand": "cd neon-guard-ui-main && npm install && npm run build",
   "outputDirectory": "neon-guard-ui-main/dist",
   "rewrites": [
