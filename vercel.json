@@ -6,20 +6,12 @@
       "config": {
         "distDir": "neon-guard-ui-main/dist"
       }
-    },
-    {
-      "src": "api/index.py",
-      "use": "@vercel/python"
     }
   ],
   "routes": [
-    { "src": "/health", "dest": "/api/index.py" },
-    { "src": "/train", "dest": "/api/index.py" },
-    { "src": "/predict(.*)", "dest": "/api/index.py" },
-    { "src": "/db(.*)", "dest": "/api/index.py" },
-    { "src": "/auth(.*)", "dest": "/api/index.py" },
-    { "src": "/model(.*)", "dest": "/api/index.py" },
-    { "handle": "filesystem" },
-    { "src": "/(.*)", "dest": "/index.html" }
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
   ]
 }
