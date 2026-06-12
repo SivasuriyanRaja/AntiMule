@@ -12,7 +12,7 @@ Tables auto-created on first connect via create_tables().
 
 import os, json
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Optional
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -59,6 +59,9 @@ def get_engine():
 
 
 def get_session() -> Session:
+    if _SessionLocal is None:
+        get_engine()
+    assert _SessionLocal is not None
     return _SessionLocal()
 
 
@@ -194,7 +197,7 @@ def save_prediction(account_data: dict, result: dict,
             ))
 
         db.commit()
-        return row.id
+        return row.id  # type: ignore
     except Exception as e:
         db.rollback()
         raise e
@@ -246,7 +249,7 @@ def save_batch(scan_id: str, accounts: list,
         ]
         db.bulk_save_objects(rows)
         db.commit()
-        return scan.id
+        return scan.id  # type: ignore
     except Exception as e:
         db.rollback()
         raise e
@@ -254,7 +257,7 @@ def save_batch(scan_id: str, accounts: list,
         db.close()
 
 
-def get_recent_predictions(limit: int = 50, user_id: int = None) -> List[dict]:
+def get_recent_predictions(limit: int = 50, user_id: Optional[int] = None) -> List[dict]:
     db = get_session()
     try:
         rows = (
@@ -333,7 +336,7 @@ def save_model_metrics(metrics: list) -> int:
         row = ModelRun(metrics=metrics)
         db.add(row)
         db.commit()
-        return row.id
+        return row.id  # type: ignore
     except Exception as e:
         db.rollback()
         raise e
@@ -341,7 +344,7 @@ def save_model_metrics(metrics: list) -> int:
         db.close()
 
 
-def create_user(email: str, password_hash: str, name: str = None) -> dict:
+def create_user(email: str, password_hash: str, name: Optional[str] = None) -> dict:
     db = get_session()
     try:
         user = User(email=email, password_hash=password_hash, name=name)
@@ -355,7 +358,7 @@ def create_user(email: str, password_hash: str, name: str = None) -> dict:
     finally:
         db.close()
 
-def get_user_by_email(email: str) -> dict:
+def get_user_by_email(email: str) -> Optional[dict]:
     db = get_session()
     try:
         user = db.query(User).filter(User.email == email).first()

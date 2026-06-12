@@ -12,7 +12,7 @@ PyMongo -> sync  (scripts, health checks)
 
 import os
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Any
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -31,7 +31,8 @@ try:
             _async_client = AsyncIOMotorClient(MONGO_URI)
         return _async_client[MONGO_DB]
 except ImportError:
-    get_async_db = None
+    def get_async_db():
+        raise ImportError("motor is required for async MongoDB operations")
 
 # ── Sync client (scripts / health checks) ────────────────────────────────────
 try:
@@ -52,7 +53,8 @@ try:
             return False
 
 except ImportError:
-    get_sync_db = None
+    def get_sync_db():
+        raise ImportError("pymongo is required for sync MongoDB operations")
     ping = lambda: False
 
 
@@ -129,7 +131,7 @@ async def async_save_batch(scan_id: str, accounts: list,
     return str(res.inserted_id)
 
 
-async def async_get_recent(limit: int = 50, user_id: str = None) -> list:
+async def async_get_recent(limit: int = 50, user_id: Optional[str] = None) -> list:
     db     = get_async_db()
     cursor = db.predictions.find(
         {}, {"_id": 0, "account_data": 0}
@@ -137,7 +139,7 @@ async def async_get_recent(limit: int = 50, user_id: str = None) -> list:
     return await cursor.to_list(length=limit)
 
 
-async def async_get_stats(user_id: str = None) -> dict:
+async def async_get_stats(user_id: Optional[str] = None) -> dict:
     db       = get_async_db()
     total    = await db.predictions.count_documents({})
     mules    = await db.predictions.count_documents({"prediction": 1})
@@ -154,9 +156,9 @@ async def async_get_stats(user_id: str = None) -> dict:
     }
 
 
-async def async_get_alerts(limit: int = 20, user_id: str = None) -> list:
+async def async_get_alerts(limit: int = 20, user_id: Optional[str] = None) -> list:
     db     = get_async_db()
-    query = {"acknowledged": False}
+    query: dict[str, Any] = {"acknowledged": False}
     if user_id: query["user_id"] = str(user_id)
     cursor = db.alerts.find(
         query, {"_id": 0}
@@ -192,7 +194,7 @@ def sync_save_prediction(account_data: dict, result: dict,
     return str(res.inserted_id)
 
 
-def sync_get_recent(limit: int = 50, user_id: str = None) -> list:
+def sync_get_recent(limit: int = 50, user_id: Optional[str] = None) -> list:
     db = get_sync_db()
     return list(
         db.predictions.find(
@@ -231,7 +233,7 @@ def ensure_indexes():
     db.batch_scans.create_index([("created_at", DESCENDING)])
     print("[MongoDB] Indexes created.")
 
-async def async_create_user(email: str, password_hash: str, name: str = None) -> dict:
+async def async_create_user(email: str, password_hash: str, name: Optional[str] = None) -> dict:
     db = get_async_db()
     doc = {'email': email, 'password_hash': password_hash, 'name': name, 'created_at': datetime.now(timezone.utc).isoformat()}
     try:
@@ -241,14 +243,14 @@ async def async_create_user(email: str, password_hash: str, name: str = None) ->
     except Exception as e:
         raise ValueError(f'User with email {email} already exists or db error: {e}')
 
-async def async_get_user_by_email(email: str) -> dict:
+async def async_get_user_by_email(email: str) -> Optional[dict]:
     db = get_async_db()
     doc = await db.users.find_one({'email': email})
     if doc:
         doc['id'] = str(doc.pop('_id'))
     return doc
 
-def create_user(email: str, password_hash: str, name: str = None) -> dict:
+def create_user(email: str, password_hash: str, name: Optional[str] = None) -> dict:
     db = get_sync_db()
     doc = {'email': email, 'password_hash': password_hash, 'name': name, 'created_at': datetime.now(timezone.utc).isoformat()}
     try:
@@ -258,7 +260,7 @@ def create_user(email: str, password_hash: str, name: str = None) -> dict:
     except Exception as e:
         raise ValueError(f'User with email {email} already exists or db error: {e}')
 
-def get_user_by_email(email: str) -> dict:
+def get_user_by_email(email: str) -> Optional[dict]:
     db = get_sync_db()
     doc = db.users.find_one({'email': email})
     if doc:

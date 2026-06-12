@@ -20,6 +20,7 @@ Set DB_BACKEND in .env:
 """
 
 import os, asyncio
+from typing import Optional
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -146,7 +147,7 @@ class _Router:
 
 
     # -- Users (async) -------------------------------------------------------
-    async def async_create_user(self, email: str, password_hash: str, name: str = None) -> dict:
+    async def async_create_user(self, email: str, password_hash: str, name: Optional[str] = None) -> dict:
         if self._mysql:
             try:
                 loop = asyncio.get_event_loop()
@@ -163,7 +164,7 @@ class _Router:
             
         raise Exception("No database backend is initialized for User authentication.")
 
-    async def async_get_user_by_email(self, email: str) -> dict:
+    async def async_get_user_by_email(self, email: str) -> Optional[dict]:
         if self._mysql:
             try:
                 loop = asyncio.get_event_loop()
