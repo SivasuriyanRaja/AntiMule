@@ -37,15 +37,26 @@ function Register() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, email, password }),
       });
-      const data = await res.json();
+      let data;
+      const text = await res.text();
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        throw new Error(`Server returned a non-JSON response (Status: ${res.status}). Ensure VITE_API_URL is correct and the backend is running.`);
+      }
+      
       if (res.ok && data.status === "success") {
         setSuccess(true);
         setTimeout(() => navigate({ to: "/login" }), 2000);
       } else {
         setError(data.detail || "Registration failed. Contact your system administrator.");
       }
-    } catch {
-      setError("Unable to connect to the server. Please try again.");
+    } catch (err: any) {
+      if (err.name === 'TypeError' && err.message.includes('Failed to fetch')) {
+          setError(`Network Error: Could not reach ${API_BASE_URL || 'the API'}. Check VITE_API_URL or CORS.`);
+      } else {
+          setError(err.message || "Unable to connect to the server. Please try again.");
+      }
     } finally {
       setLoading(false);
     }

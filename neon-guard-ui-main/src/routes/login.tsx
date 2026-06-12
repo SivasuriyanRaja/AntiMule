@@ -28,7 +28,13 @@ function Login() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
-      const data = await res.json();
+      let data;
+      const text = await res.text();
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        throw new Error(`Server returned a non-JSON response (Status: ${res.status}). Ensure VITE_API_URL is correct and the backend is running.`);
+      }
 
       if (res.ok && data.status === "success") {
         localStorage.setItem("auth_token", data.token);
@@ -38,8 +44,12 @@ function Login() {
       } else {
         setError(data.detail || "Invalid credentials. Please check your employee ID and password.");
       }
-    } catch {
-      setError("Unable to connect to the compliance server. Please contact IT support.");
+    } catch (err: any) {
+      if (err.name === 'TypeError' && err.message.includes('Failed to fetch')) {
+          setError(`Network Error: Could not reach ${API_BASE_URL || 'the API'}. Check VITE_API_URL or CORS.`);
+      } else {
+          setError(err.message || "Unable to connect to the compliance server. Please contact IT support.");
+      }
     } finally {
       setLoading(false);
     }
