@@ -346,7 +346,7 @@ if __name__ == "__main__":
 
 # -- Auth Endpoints ------------------------------------------------------------
 import jwt
-import bcrypt
+from passlib.hash import pbkdf2_sha256
 
 from datetime import datetime, timedelta, timezone
 
@@ -370,7 +370,7 @@ class UserLogin(BaseModel):
 async def register(user: UserCreate):
     if not _DB_AVAILABLE:
         raise HTTPException(status_code=500, detail='Database unavailable')
-    pass_hash = bcrypt.hashpw(user.password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    pass_hash = pbkdf2_sha256.hash(user.password)
     try:
         new_user = await _db.async_create_user(user.email, pass_hash, user.name)
         return {'status': 'success', 'user': {'id': new_user['id'], 'email': new_user['email'], 'name': new_user.get('name')}}
@@ -382,7 +382,7 @@ async def login(user: UserLogin):
     if not _DB_AVAILABLE:
         raise HTTPException(status_code=500, detail='Database unavailable')
     db_user = await _db.async_get_user_by_email(user.email)
-    if not db_user or not bcrypt.checkpw(user.password.encode('utf-8'), db_user['password_hash'].encode('utf-8')):
+    if not db_user or not pbkdf2_sha256.verify(user.password, db_user['password_hash']):
         raise HTTPException(status_code=401, detail='Invalid email or password')
     
     payload = {
