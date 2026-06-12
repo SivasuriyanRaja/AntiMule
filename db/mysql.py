@@ -21,7 +21,7 @@ from sqlalchemy import (
     create_engine, text, Column, Integer, String,
     Float, Boolean, DateTime, JSON, Text
 )
-from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker, Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from sqlalchemy.pool import QueuePool
 
 MYSQL_HOST = os.getenv("MYSQL_HOST", "localhost")
@@ -81,7 +81,7 @@ class Base(DeclarativeBase):
 class User(Base):
     __tablename__ = "users"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     email = Column(String(255), nullable=False, unique=True)
     name = Column(String(255), nullable=True)
     password_hash = Column(String(255), nullable=False)
@@ -91,7 +91,7 @@ class User(Base):
 class Prediction(Base):
     __tablename__ = "predictions"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     user_id               = Column(Integer, nullable=True)
     # Key account features stored for audit trail
     f115                  = Column(Float)
@@ -118,7 +118,7 @@ class Prediction(Base):
 class BatchScan(Base):
     __tablename__ = "batch_scans"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     user_id         = Column(Integer, nullable=True)
     scan_id         = Column(String(36), unique=True, nullable=False)
     total           = Column(Integer)
@@ -134,7 +134,7 @@ class BatchScan(Base):
 class Alert(Base):
     __tablename__ = "alerts"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     user_id        = Column(Integer, nullable=True)
     prediction_id  = Column(Integer, index=True)
     risk_score     = Column(Integer)
@@ -148,7 +148,7 @@ class Alert(Base):
 class ModelRun(Base):
     __tablename__ = "model_runs"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     metrics    = Column(JSON)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
@@ -199,7 +199,7 @@ def save_prediction(account_data: dict, result: dict,
             ))
 
         db.commit()
-        return row.id
+        return int(row.id) # type: ignore
     except Exception as e:
         db.rollback()
         raise e
@@ -253,7 +253,7 @@ def save_batch(scan_id: str, accounts: list,
         ]
         db.bulk_save_objects(rows)
         db.commit()
-        return scan.id
+        return int(scan.id) # type: ignore
     except Exception as e:
         db.rollback()
         raise e
@@ -357,7 +357,7 @@ def save_model_metrics(metrics: list) -> int:
         row = ModelRun(metrics=metrics)
         db.add(row)
         db.commit()
-        return row.id
+        return int(row.id) # type: ignore
     except Exception as e:
         db.rollback()
         raise e
