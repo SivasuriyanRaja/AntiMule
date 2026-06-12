@@ -254,11 +254,14 @@ def save_batch(scan_id: str, accounts: list,
         db.close()
 
 
-def get_recent_predictions(limit: int = 50, user_id: int = None) -> List[dict]:
+def get_recent_predictions(limit: int = 50, user_id: Optional[int] = None) -> List[dict]:
     db = get_session()
     try:
+        query = db.query(Prediction)
+        if user_id is not None:
+            query = query.filter(Prediction.user_id == user_id)
         rows = (
-            db.query(Prediction)
+            query
             .order_by(Prediction.created_at.desc())
             .limit(limit)
             .all()
@@ -281,15 +284,29 @@ def get_recent_predictions(limit: int = 50, user_id: int = None) -> List[dict]:
         db.close()
 
 
-def get_stats() -> dict:
+def get_stats(user_id: Optional[int] = None) -> dict:
     db = get_session()
     try:
-        total  = db.query(Prediction).count()
-        mules  = db.query(Prediction).filter(Prediction.prediction == 1).count()
-        alerts = db.query(Alert).filter(Alert.acknowledged == False).count()
-        tier_rows = db.execute(
-            text("SELECT risk_tier, COUNT(*) cnt FROM predictions GROUP BY risk_tier")
-        ).fetchall()
+        pred_query = db.query(Prediction)
+        alert_query = db.query(Alert).filter(Alert.acknowledged == False)
+        if user_id is not None:
+            pred_query = pred_query.filter(Prediction.user_id == user_id)
+            alert_query = alert_query.filter(Alert.user_id == user_id)
+            
+        total  = pred_query.count()
+        mules  = pred_query.filter(Prediction.prediction == 1).count()
+        alerts = alert_query.count()
+        
+        if user_id is not None:
+            tier_rows = db.execute(
+                text("SELECT risk_tier, COUNT(*) cnt FROM predictions WHERE user_id = :uid GROUP BY risk_tier"),
+                {"uid": user_id}
+            ).fetchall()
+        else:
+            tier_rows = db.execute(
+                text("SELECT risk_tier, COUNT(*) cnt FROM predictions GROUP BY risk_tier")
+            ).fetchall()
+            
         return {
             "total_scored":   total,
             "mule_count":     mules,
@@ -355,7 +372,7 @@ def create_user(email: str, password_hash: str, name: Optional[str] = None) -> d
     finally:
         db.close()
 
-def get_user_by_email(email: str) -> dict:
+def get_user_by_email(email: str) -> Optional[dict]:
     db = get_session()
     try:
         user = db.query(User).filter(User.email == email).first()

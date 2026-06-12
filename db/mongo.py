@@ -131,20 +131,29 @@ async def async_save_batch(scan_id: str, accounts: list,
 
 async def async_get_recent(limit: int = 50, user_id: Optional[str] = None) -> list:
     db     = get_async_db()
+    query  = {"user_id": str(user_id)} if user_id else {}
     cursor = db.predictions.find(
-        {}, {"_id": 0, "account_data": 0}
+        query, {"_id": 0, "account_data": 0}
     ).sort("created_at", -1).limit(limit)
     return await cursor.to_list(length=limit)
 
 
 async def async_get_stats(user_id: Optional[str] = None) -> dict:
     db       = get_async_db()
-    total    = await db.predictions.count_documents({})
-    mules    = await db.predictions.count_documents({"prediction": 1})
-    alerts   = await db.alerts.count_documents({"acknowledged": False})
-    tier_agg = await db.predictions.aggregate(
-        [{"$group": {"_id": "$risk_tier", "count": {"$sum": 1}}}]
-    ).to_list(length=10)
+    query    = {"user_id": str(user_id)} if user_id else {}
+    total    = await db.predictions.count_documents(query)
+    mules    = await db.predictions.count_documents({**query, "prediction": 1})
+    
+    alert_query = {"acknowledged": False}
+    if user_id: alert_query["user_id"] = str(user_id)
+    alerts   = await db.alerts.count_documents(alert_query)
+    
+    match_stage = {"$match": query} if query else None
+    pipeline = [{"$group": {"_id": "$risk_tier", "count": {"$sum": 1}}}]
+    if match_stage:
+        pipeline.insert(0, match_stage)
+        
+    tier_agg = await db.predictions.aggregate(pipeline).to_list(length=10)
     return {
         "total_scored":  total,
         "mule_count":    mules,
@@ -194,26 +203,35 @@ def sync_save_prediction(account_data: dict, result: dict,
 
 def sync_get_recent(limit: int = 50, user_id: Optional[str] = None) -> list:
     db = get_sync_db()
+    query  = {"user_id": str(user_id)} if user_id else {}
     return list(
         db.predictions.find(
-            {}, {"_id": 0, "account_data": 0}
+            query, {"_id": 0, "account_data": 0}
         ).sort("created_at", DESCENDING).limit(limit)
     )
 
 
-def sync_get_stats() -> dict:
+def sync_get_stats(user_id: Optional[str] = None) -> dict:
     db     = get_sync_db()
-    total  = db.predictions.count_documents({})
-    mules  = db.predictions.count_documents({"prediction": 1})
-    alerts = db.alerts.count_documents({"acknowledged": False})
-    tiers  = db.predictions.aggregate(
-        [{"$group": {"_id": "$risk_tier", "count": {"$sum": 1}}}]
-    )
+    query  = {"user_id": str(user_id)} if user_id else {}
+    total  = db.predictions.count_documents(query)
+    mules  = db.predictions.count_documents({**query, "prediction": 1})
+    
+    alert_query = {"acknowledged": False}
+    if user_id: alert_query["user_id"] = str(user_id)
+    alerts = db.alerts.count_documents(alert_query)
+    
+    match_stage = {"$match": query} if query else None
+    pipeline = [{"$group": {"_id": "$risk_tier", "count": {"$sum": 1}}}]
+    if match_stage:
+        pipeline.insert(0, match_stage)
+        
+    tiers  = db.predictions.aggregate(pipeline)
     return {
         "total_scored":   total,
         "mule_count":     mules,
         "legit_count":    total - mules,
-        "open_alerts":    alerts,
+        "open_alerts":   alerts,
         "tier_breakdown": {d["_id"]: d["count"] for d in tiers if d["_id"]},
     }
 
