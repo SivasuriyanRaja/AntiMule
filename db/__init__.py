@@ -147,18 +147,21 @@ class _Router:
 
     # -- Users (async) -------------------------------------------------------
     async def async_create_user(self, email: str, password_hash: str, name: str = None) -> dict:
-        user = None
         if self._mysql:
             try:
                 loop = asyncio.get_event_loop()
                 user = await loop.run_in_executor(None, self._mysql.create_user, email, password_hash, name)
+                return user
             except Exception as e:
-                if not user: raise e
-        elif self._mongo:
+                if "already exists" in str(e):
+                    raise e
+                print(f"[DB] MySQL user creation failed: {e}. Falling back to Mongo.")
+        
+        if self._mongo:
             user = await self._mongo.async_create_user(email, password_hash, name)
-        else:
-            raise Exception("No database backend is initialized for User authentication.")
-        return user
+            return user
+            
+        raise Exception("No database backend is initialized for User authentication.")
 
     async def async_get_user_by_email(self, email: str) -> dict:
         if self._mysql:
@@ -166,13 +169,14 @@ class _Router:
                 loop = asyncio.get_event_loop()
                 user = await loop.run_in_executor(None, self._mysql.get_user_by_email, email)
                 if user: return user
-            except Exception:
-                pass
-        elif self._mongo:
+            except Exception as e:
+                print(f"[DB] MySQL get_user failed: {e}. Falling back to Mongo.")
+                
+        if self._mongo:
             user = await self._mongo.async_get_user_by_email(email)
             if user: return user
-        
-        raise Exception("No database backend is initialized for User authentication.")
+            
+        return None
 
 
 # Singleton — import this everywhere
