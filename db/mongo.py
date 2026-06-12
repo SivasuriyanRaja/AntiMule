@@ -12,7 +12,7 @@ PyMongo -> sync  (scripts, health checks)
 
 import os
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Any
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -25,20 +25,21 @@ try:
     from motor.motor_asyncio import AsyncIOMotorClient
     _async_client: Optional[AsyncIOMotorClient] = None
 
-    def get_async_db():
+    def get_async_db() -> Any:
         global _async_client
         if _async_client is None:
             _async_client = AsyncIOMotorClient(MONGO_URI)
         return _async_client[MONGO_DB]
 except ImportError:
-    get_async_db = None
+    def get_async_db() -> Any:
+        raise ImportError("motor is not installed")
 
 # ── Sync client (scripts / health checks) ────────────────────────────────────
 try:
     from pymongo import MongoClient, DESCENDING
     _sync_client: Optional[MongoClient] = None
 
-    def get_sync_db():
+    def get_sync_db() -> Any:
         global _sync_client
         if _sync_client is None:
             _sync_client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=3000)
@@ -52,8 +53,11 @@ try:
             return False
 
 except ImportError:
-    get_sync_db = None
-    ping = lambda: False
+    DESCENDING = -1
+    def get_sync_db() -> Any:
+        raise ImportError("pymongo is not installed")
+    def ping() -> bool:
+        return False
 
 
 # ── Document builders ─────────────────────────────────────────────────────────
@@ -72,7 +76,7 @@ def _pred_doc(account_data: dict, result: dict, source: str = "api", user_id: Op
         "source":               source,
         "created_at":           datetime.now(timezone.utc),
     }
-    if user_id: doc["user_id"] = str(user_id)
+    if user_id: doc["user_id"] = user_id
     return doc
 
 
@@ -94,7 +98,7 @@ def _batch_doc(scan_id: str, results: list, source: str = "api", user_id: Option
         "source":         source,
         "created_at":     datetime.now(timezone.utc),
     }
-    if user_id: doc["user_id"] = str(user_id)
+    if user_id: doc["user_id"] = user_id
     return doc
 
 
@@ -118,7 +122,7 @@ async def async_save_prediction(account_data: dict, result: dict,
             "acknowledged":   False,
             "created_at":     datetime.now(timezone.utc),
         }
-        if user_id: alert_doc["user_id"] = str(user_id)
+        if user_id: alert_doc["user_id"] = user_id
         await db.alerts.insert_one(alert_doc)
     return str(res.inserted_id)
 
@@ -137,7 +141,7 @@ async def async_save_batch(scan_id: str, accounts: list,
 
 async def async_get_recent(limit: int = 50, user_id: Optional[str] = None) -> list:
     db     = get_async_db()
-    query  = {"user_id": str(user_id)} if user_id else {}
+    query  = {"user_id": user_id} if user_id else {}
     cursor = db.predictions.find(
         query, {"_id": 0, "account_data": 0}
     ).sort("created_at", -1).limit(limit)
@@ -146,16 +150,16 @@ async def async_get_recent(limit: int = 50, user_id: Optional[str] = None) -> li
 
 async def async_get_stats(user_id: Optional[str] = None) -> dict:
     db       = get_async_db()
-    query    = {"user_id": str(user_id)} if user_id else {}
+    query    = {"user_id": user_id} if user_id else {}
     total    = await db.predictions.count_documents(query)
     mules    = await db.predictions.count_documents({**query, "prediction": 1})
     
-    alert_query = {"acknowledged": False}
-    if user_id: alert_query["user_id"] = str(user_id)
+    alert_query: dict[str, Any] = {"acknowledged": False}
+    if user_id: alert_query["user_id"] = user_id
     alerts   = await db.alerts.count_documents(alert_query)
     
     match_stage = {"$match": query} if query else None
-    pipeline = [{"$group": {"_id": "$risk_tier", "count": {"$sum": 1}}}]
+    pipeline: list[dict[str, Any]] = [{"$group": {"_id": "$risk_tier", "count": {"$sum": 1}}}]
     if match_stage:
         pipeline.insert(0, match_stage)
         
@@ -171,8 +175,8 @@ async def async_get_stats(user_id: Optional[str] = None) -> dict:
 
 async def async_get_alerts(limit: int = 20, user_id: Optional[str] = None) -> list:
     db     = get_async_db()
-    query = {"acknowledged": False}
-    if user_id: query["user_id"] = str(user_id)
+    query: dict[str, Any] = {"acknowledged": False}
+    if user_id: query["user_id"] = user_id
     cursor = db.alerts.find(
         query, {"_id": 0}
     ).sort("created_at", -1).limit(limit)
@@ -204,14 +208,14 @@ def sync_save_prediction(account_data: dict, result: dict,
             "acknowledged":   False,
             "created_at":     datetime.now(timezone.utc),
         }
-        if user_id: alert_doc["user_id"] = str(user_id)
+        if user_id: alert_doc["user_id"] = user_id
         db.alerts.insert_one(alert_doc)
     return str(res.inserted_id)
 
 
 def sync_get_recent(limit: int = 50, user_id: Optional[str] = None) -> list:
     db = get_sync_db()
-    query  = {"user_id": str(user_id)} if user_id else {}
+    query  = {"user_id": user_id} if user_id else {}
     return list(
         db.predictions.find(
             query, {"_id": 0, "account_data": 0}
@@ -221,16 +225,16 @@ def sync_get_recent(limit: int = 50, user_id: Optional[str] = None) -> list:
 
 def sync_get_stats(user_id: Optional[str] = None) -> dict:
     db     = get_sync_db()
-    query  = {"user_id": str(user_id)} if user_id else {}
+    query  = {"user_id": user_id} if user_id else {}
     total  = db.predictions.count_documents(query)
     mules  = db.predictions.count_documents({**query, "prediction": 1})
     
-    alert_query = {"acknowledged": False}
-    if user_id: alert_query["user_id"] = str(user_id)
+    alert_query: dict[str, Any] = {"acknowledged": False}
+    if user_id: alert_query["user_id"] = user_id
     alerts = db.alerts.count_documents(alert_query)
     
     match_stage = {"$match": query} if query else None
-    pipeline = [{"$group": {"_id": "$risk_tier", "count": {"$sum": 1}}}]
+    pipeline: list[dict[str, Any]] = [{"$group": {"_id": "$risk_tier", "count": {"$sum": 1}}}]
     if match_stage:
         pipeline.insert(0, match_stage)
         
