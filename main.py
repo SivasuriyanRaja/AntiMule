@@ -71,6 +71,15 @@ app.add_middleware(
 )
 
 
+# ── / (Root endpoint) ──────────────────────────────────────────────────────────
+@app.get("/")
+def root():
+    return {
+        "status": "ok", 
+        "message": "AntiMule API is running.", 
+        "docs": "/docs"
+    }
+
 # ── /health ───────────────────────────────────────────────────────────────────
 @app.get("/health")
 def health():
