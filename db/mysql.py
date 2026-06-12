@@ -21,7 +21,7 @@ from sqlalchemy import (
     create_engine, text, Column, Integer, String,
     Float, Boolean, DateTime, JSON, Text
 )
-from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker, Mapped, mapped_column
 from sqlalchemy.pool import QueuePool
 
 MYSQL_HOST = os.getenv("MYSQL_HOST", "localhost")
@@ -59,6 +59,9 @@ def get_engine():
 
 
 def get_session() -> Session:
+    if _SessionLocal is None:
+        get_engine()
+    assert _SessionLocal is not None
     return _SessionLocal()
 
 
@@ -78,7 +81,7 @@ class Base(DeclarativeBase):
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     email = Column(String(255), nullable=False, unique=True)
     name = Column(String(255), nullable=True)
     password_hash = Column(String(255), nullable=False)
@@ -88,7 +91,7 @@ class User(Base):
 class Prediction(Base):
     __tablename__ = "predictions"
 
-    id                    = Column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     user_id               = Column(Integer, nullable=True)
     # Key account features stored for audit trail
     f115                  = Column(Float)
@@ -115,7 +118,7 @@ class Prediction(Base):
 class BatchScan(Base):
     __tablename__ = "batch_scans"
 
-    id              = Column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     user_id         = Column(Integer, nullable=True)
     scan_id         = Column(String(36), unique=True, nullable=False)
     total           = Column(Integer)
@@ -131,7 +134,7 @@ class BatchScan(Base):
 class Alert(Base):
     __tablename__ = "alerts"
 
-    id             = Column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     user_id        = Column(Integer, nullable=True)
     prediction_id  = Column(Integer, index=True)
     risk_score     = Column(Integer)
@@ -145,7 +148,7 @@ class Alert(Base):
 class ModelRun(Base):
     __tablename__ = "model_runs"
 
-    id         = Column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     metrics    = Column(JSON)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
