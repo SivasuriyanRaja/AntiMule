@@ -59,9 +59,6 @@ def get_engine():
 
 
 def get_session() -> Session:
-    if _SessionLocal is None:
-        get_engine()
-    assert _SessionLocal is not None
     return _SessionLocal()
 
 
@@ -197,7 +194,7 @@ def save_prediction(account_data: dict, result: dict,
             ))
 
         db.commit()
-        return row.id  # type: ignore
+        return row.id
     except Exception as e:
         db.rollback()
         raise e
@@ -249,7 +246,7 @@ def save_batch(scan_id: str, accounts: list,
         ]
         db.bulk_save_objects(rows)
         db.commit()
-        return scan.id  # type: ignore
+        return scan.id
     except Exception as e:
         db.rollback()
         raise e
@@ -257,7 +254,7 @@ def save_batch(scan_id: str, accounts: list,
         db.close()
 
 
-def get_recent_predictions(limit: int = 50, user_id: Optional[int] = None) -> List[dict]:
+def get_recent_predictions(limit: int = 50, user_id: int = None) -> List[dict]:
     db = get_session()
     try:
         rows = (
@@ -336,7 +333,7 @@ def save_model_metrics(metrics: list) -> int:
         row = ModelRun(metrics=metrics)
         db.add(row)
         db.commit()
-        return row.id  # type: ignore
+        return row.id
     except Exception as e:
         db.rollback()
         raise e
@@ -358,7 +355,7 @@ def create_user(email: str, password_hash: str, name: Optional[str] = None) -> d
     finally:
         db.close()
 
-def get_user_by_email(email: str) -> Optional[dict]:
+def get_user_by_email(email: str) -> dict:
     db = get_session()
     try:
         user = db.query(User).filter(User.email == email).first()

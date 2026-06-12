@@ -12,7 +12,7 @@ PyMongo -> sync  (scripts, health checks)
 
 import os
 from datetime import datetime, timezone
-from typing import Optional, Any
+from typing import Optional
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -31,8 +31,7 @@ try:
             _async_client = AsyncIOMotorClient(MONGO_URI)
         return _async_client[MONGO_DB]
 except ImportError:
-    def get_async_db():
-        raise ImportError("motor is required for async MongoDB operations")
+    get_async_db = None
 
 # ── Sync client (scripts / health checks) ────────────────────────────────────
 try:
@@ -53,8 +52,7 @@ try:
             return False
 
 except ImportError:
-    def get_sync_db():
-        raise ImportError("pymongo is required for sync MongoDB operations")
+    get_sync_db = None
     ping = lambda: False
 
 
@@ -158,7 +156,7 @@ async def async_get_stats(user_id: Optional[str] = None) -> dict:
 
 async def async_get_alerts(limit: int = 20, user_id: Optional[str] = None) -> list:
     db     = get_async_db()
-    query: dict[str, Any] = {"acknowledged": False}
+    query = {"acknowledged": False}
     if user_id: query["user_id"] = str(user_id)
     cursor = db.alerts.find(
         query, {"_id": 0}
