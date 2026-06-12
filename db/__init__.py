@@ -44,7 +44,6 @@ class _Router:
 
         try:
             from db import mysql as _s
-            _s.create_tables()
             self._mysql = _s
             print(f"[DB] MySQL ready    -> {_s.MYSQL_HOST}/{_s.MYSQL_DB}")
         except Exception as e:
