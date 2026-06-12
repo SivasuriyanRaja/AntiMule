@@ -370,18 +370,30 @@ class UserLogin(BaseModel):
 async def register(user: UserCreate):
     if not _DB_AVAILABLE:
         raise HTTPException(status_code=500, detail='Database unavailable')
+    
     pass_hash = pbkdf2_sha256.hash(user.password)
     try:
         new_user = await _db.async_create_user(user.email, pass_hash, user.name)
         return {'status': 'success', 'user': {'id': new_user['id'], 'email': new_user['email'], 'name': new_user.get('name')}}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @app.post('/auth/login')
 async def login(user: UserLogin):
     if not _DB_AVAILABLE:
         raise HTTPException(status_code=500, detail='Database unavailable')
-    db_user = await _db.async_get_user_by_email(user.email)
+    
+    try:
+        db_user = await _db.async_get_user_by_email(user.email)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
     if not db_user or not pbkdf2_sha256.verify(user.password, db_user['password_hash']):
         raise HTTPException(status_code=401, detail='Invalid email or password')
     

@@ -28,7 +28,7 @@ try:
     def get_async_db() -> Any:
         global _async_client
         if _async_client is None:
-            _async_client = AsyncIOMotorClient(MONGO_URI)
+            _async_client = AsyncIOMotorClient(MONGO_URI, serverSelectionTimeoutMS=5000)
         return _async_client[MONGO_DB]
 except ImportError:
     def get_async_db() -> Any:
