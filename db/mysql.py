@@ -158,10 +158,11 @@ def create_tables():
 
 # ── CRUD ──────────────────────────────────────────────────────────────────────
 def save_prediction(account_data: dict, result: dict,
-                    source: str = "api") -> int:
+                    source: str = "api", user_id: Optional[int] = None) -> int:
     db = get_session()
     try:
         row = Prediction(
+            user_id               = user_id,
             f115                  = account_data.get("F115"),
             f321                  = account_data.get("F321"),
             f670                  = account_data.get("F670"),
@@ -186,6 +187,7 @@ def save_prediction(account_data: dict, result: dict,
         # Auto-alert
         if result.get("risk_tier") in ("CRITICAL", "HIGH"):
             db.add(Alert(
+                user_id        = user_id,
                 prediction_id  = row.id,
                 risk_score     = result.get("risk_score"),
                 risk_tier      = result.get("risk_tier"),
@@ -203,7 +205,7 @@ def save_prediction(account_data: dict, result: dict,
 
 
 def save_batch(scan_id: str, accounts: list,
-               results: list, source: str = "api") -> int:
+               results: list, source: str = "api", user_id: Optional[int] = None) -> int:
     db = get_session()
     try:
         mule_count = sum(1 for r in results if r.get("prediction") == 1)
@@ -213,6 +215,7 @@ def save_batch(scan_id: str, accounts: list,
             tiers[t] = tiers.get(t, 0) + 1
 
         scan = BatchScan(
+            user_id        = user_id,
             scan_id        = scan_id,
             total          = len(results),
             mule_count     = mule_count,
@@ -227,6 +230,7 @@ def save_batch(scan_id: str, accounts: list,
 
         rows = [
             Prediction(
+                user_id               = user_id,
                 f115                  = a.get("F115"),
                 f670                  = a.get("F670"),
                 f3894                 = a.get("F3894"),

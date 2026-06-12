@@ -57,8 +57,8 @@ except ImportError:
 
 
 # ── Document builders ─────────────────────────────────────────────────────────
-def _pred_doc(account_data: dict, result: dict, source: str = "api") -> dict:
-    return {
+def _pred_doc(account_data: dict, result: dict, source: str = "api", user_id: Optional[str] = None) -> dict:
+    doc = {
         "account_data":         account_data,
         "ml_probability":       result.get("ml_probability"),
         "anomaly_score":        result.get("anomaly_score"),
@@ -72,16 +72,18 @@ def _pred_doc(account_data: dict, result: dict, source: str = "api") -> dict:
         "source":               source,
         "created_at":           datetime.now(timezone.utc),
     }
+    if user_id: doc["user_id"] = str(user_id)
+    return doc
 
 
-def _batch_doc(scan_id: str, results: list, source: str = "api") -> dict:
+def _batch_doc(scan_id: str, results: list, source: str = "api", user_id: Optional[str] = None) -> dict:
     mule_count = sum(1 for r in results if r.get("prediction") == 1)
     tiers = {}
     for r in results:
         t = r.get("risk_tier", "UNKNOWN")
         tiers[t] = tiers.get(t, 0) + 1
     avg_risk = round(sum(r.get("risk_score", 0) for r in results) / max(len(results), 1), 2)
-    return {
+    doc = {
         "scan_id":        scan_id,
         "total":          len(results),
         "mule_count":     mule_count,
@@ -92,6 +94,8 @@ def _batch_doc(scan_id: str, results: list, source: str = "api") -> dict:
         "source":         source,
         "created_at":     datetime.now(timezone.utc),
     }
+    if user_id: doc["user_id"] = str(user_id)
+    return doc
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -99,13 +103,13 @@ def _batch_doc(scan_id: str, results: list, source: str = "api") -> dict:
 # ═══════════════════════════════════════════════════════════════════
 
 async def async_save_prediction(account_data: dict, result: dict,
-                                source: str = "api") -> str:
+                                source: str = "api", user_id: Optional[str] = None) -> str:
     db  = get_async_db()
-    doc = _pred_doc(account_data, result, source)
+    doc = _pred_doc(account_data, result, source, user_id)
     res = await db.predictions.insert_one(doc)
     # Auto-alert for CRITICAL / HIGH risk
     if result.get("risk_tier") in ("CRITICAL", "HIGH"):
-        await db.alerts.insert_one({
+        alert_doc = {
             "prediction_id":  str(res.inserted_id),
             "risk_score":     result.get("risk_score"),
             "risk_tier":      result.get("risk_tier"),
@@ -113,17 +117,19 @@ async def async_save_prediction(account_data: dict, result: dict,
             "alert_reason":   (result.get("alerts") or ["High risk detected"])[0],
             "acknowledged":   False,
             "created_at":     datetime.now(timezone.utc),
-        })
+        }
+        if user_id: alert_doc["user_id"] = str(user_id)
+        await db.alerts.insert_one(alert_doc)
     return str(res.inserted_id)
 
 
 async def async_save_batch(scan_id: str, accounts: list,
-                           results: list, source: str = "api") -> str:
+                           results: list, source: str = "api", user_id: Optional[str] = None) -> str:
     db  = get_async_db()
-    doc = _batch_doc(scan_id, results, source)
+    doc = _batch_doc(scan_id, results, source, user_id)
     res = await db.batch_scans.insert_one(doc)
     # Bulk insert individual predictions
-    docs = [_pred_doc(a, r, "batch") for a, r in zip(accounts, results)]
+    docs = [_pred_doc(a, r, "batch", user_id) for a, r in zip(accounts, results)]
     if docs:
         await db.predictions.insert_many(docs)
     return str(res.inserted_id)
@@ -185,19 +191,21 @@ async def async_save_model_metrics(metrics: list) -> str:
 # ═══════════════════════════════════════════════════════════════════
 
 def sync_save_prediction(account_data: dict, result: dict,
-                         source: str = "api") -> str:
+                         source: str = "api", user_id: Optional[str] = None) -> str:
     db  = get_sync_db()
-    doc = _pred_doc(account_data, result, source)
+    doc = _pred_doc(account_data, result, source, user_id)
     res = db.predictions.insert_one(doc)
     if result.get("risk_tier") in ("CRITICAL", "HIGH"):
-        db.alerts.insert_one({
+        alert_doc = {
             "prediction_id":  str(res.inserted_id),
             "risk_score":     result.get("risk_score"),
             "risk_tier":      result.get("risk_tier"),
             "alert_reason":   (result.get("alerts") or ["High risk detected"])[0],
             "acknowledged":   False,
             "created_at":     datetime.now(timezone.utc),
-        })
+        }
+        if user_id: alert_doc["user_id"] = str(user_id)
+        db.alerts.insert_one(alert_doc)
     return str(res.inserted_id)
 
 
