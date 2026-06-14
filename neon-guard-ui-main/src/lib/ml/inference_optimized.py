@@ -18,8 +18,13 @@ import logging
 sys.path.insert(0, os.path.dirname(__file__))
 from preprocess_optimized import engineer_features, transform_new_data, isolation_anomaly_scores
 
-ARTIFACTS_DIR = os.path.join(os.path.dirname(__file__), '..', 'models')
+def get_artifacts_dir():
+    tmp_dir = "/tmp/models"
+    if os.environ.get("VERCEL") and os.path.exists(tmp_dir) and os.path.exists(os.path.join(tmp_dir, 'best_model.pkl')):
+        return tmp_dir
+    return os.path.join(os.path.dirname(__file__), '..', 'models')
 
+ARTIFACTS_DIR = get_artifacts_dir()
 # Risk tier configuration
 RISK_TIERS = {
     (0.00, 0.25): ('LOW', '#27ae60'),
@@ -46,6 +51,10 @@ class MuleDetectorOptimized:
         self._model = None
         self._label_encoders = None
         self._threshold = None
+        self._imputer = None
+        self._scaler = None
+        self._feature_cols = None
+        self._iso_forest = None
         self._cache = {}  # Simple cache for repeated predictions
         logger.info("MuleDetectorOptimized initialized")
     
@@ -54,6 +63,10 @@ class MuleDetectorOptimized:
         if self._model is None:
             self._model = joblib.load(os.path.join(self.artifacts_dir, 'best_model.pkl'))
             self._label_encoders = joblib.load(os.path.join(self.artifacts_dir, 'label_encoders.pkl'))
+            self._imputer = joblib.load(os.path.join(self.artifacts_dir, 'imputer.pkl'))
+            self._scaler = joblib.load(os.path.join(self.artifacts_dir, 'scaler.pkl'))
+            self._feature_cols = joblib.load(os.path.join(self.artifacts_dir, 'feature_cols.pkl'))
+            self._iso_forest = joblib.load(os.path.join(self.artifacts_dir, 'isolation_forest.pkl'))
             
             # Try to load optimized threshold, fall back to 0.5
             try:
@@ -98,11 +111,26 @@ class MuleDetectorOptimized:
         
         # Feature engineering
         df_eng, _ = engineer_features(df_row)
-        X_transformed = transform_new_data(df_eng, artifacts_dir=self.artifacts_dir)
+        
+        # Transform data using cached objects (AVOID DISK I/O)
+        aligned_df = pd.DataFrame(index=df_eng.index, columns=self._feature_cols)
+        for c in self._feature_cols:
+            aligned_df[c] = pd.to_numeric(df_eng[c], errors='coerce') if c in df_eng.columns else np.nan
+        X_imp = self._imputer.transform(aligned_df[self._feature_cols])
+        X_transformed = self._scaler.transform(X_imp)
         
         # Predictions (vectorized)
-        ml_prob = float(model.predict_proba(X_transformed)[0][1])
-        iso_score = float(isolation_anomaly_scores(X_transformed, artifacts_dir=self.artifacts_dir)[0])
+        probs = np.atleast_1d(model.predict_proba(X_transformed))
+        # Handle case where predict_proba returns 1D array vs 2D array
+        ml_prob = float(probs[1] if probs.ndim == 1 else probs[0][1])
+        
+        # Anomaly score using cached isolation forest
+        scores = np.atleast_1d(-self._iso_forest.score_samples(X_transformed))
+        if len(scores) > 0:
+            norm_scores = (scores - np.min(scores)) / (np.max(scores) - np.min(scores) + 1e-8)
+            iso_score = float(norm_scores[0])
+        else:
+            iso_score = 0.0
         
         # Composite scoring with blended anomaly
         composite = (1 - iso_weight) * ml_prob + iso_weight * iso_score
@@ -115,6 +143,26 @@ class MuleDetectorOptimized:
         # Generate alerts
         alerts = self._generate_alerts(row_dict, composite, ml_prob, iso_score)
         
+        # Generate pseudo-SHAP values for explanation
+        shap_values = {}
+        try:
+            importances = None
+            if hasattr(model, 'estimators_'):
+                for est in model.estimators_:
+                    if hasattr(est, 'feature_importances_'):
+                        importances = est.feature_importances_
+                        break
+            elif hasattr(model, 'feature_importances_'):
+                importances = model.feature_importances_
+                
+            if importances is not None:
+                local_contribs = importances * X_transformed[0]
+                for i, col in enumerate(self._feature_cols):
+                    shap_values[col] = float(local_contribs[i])
+                shap_values = dict(sorted(shap_values.items(), key=lambda x: abs(x[1]), reverse=True))
+        except Exception as e:
+            logger.warning(f"Could not generate SHAP values: {e}")
+            
         return {
             'ml_probability': round(ml_prob, 4),
             'anomaly_score': round(iso_score, 4),
@@ -126,6 +174,7 @@ class MuleDetectorOptimized:
             'prediction_label': 'SUSPICIOUS (MULE)' if prediction == 1 else 'LEGITIMATE',
             'confidence': round(abs(composite - 0.5) * 2, 4),  # 0-1 confidence
             'alerts': alerts,
+            'shap_values': shap_values,
         }
     
     def predict_batch(self, df: pd.DataFrame, iso_weight: float = 0.20) -> pd.DataFrame:
@@ -145,11 +194,21 @@ class MuleDetectorOptimized:
         
         # Feature engineering
         df_eng, _ = engineer_features(df_work)
-        X_transformed = transform_new_data(df_eng, artifacts_dir=self.artifacts_dir)
+        
+        # Transform data using cached objects (AVOID DISK I/O)
+        aligned_df = pd.DataFrame(index=df_eng.index, columns=self._feature_cols)
+        for c in self._feature_cols:
+            aligned_df[c] = pd.to_numeric(df_eng[c], errors='coerce') if c in df_eng.columns else np.nan
+        X_imp = self._imputer.transform(aligned_df[self._feature_cols])
+        X_transformed = self._scaler.transform(X_imp)
         
         # Vectorized predictions
-        ml_probs = model.predict_proba(X_transformed)[:, 1]
-        iso_scores = isolation_anomaly_scores(X_transformed, artifacts_dir=self.artifacts_dir)
+        probs = np.atleast_2d(model.predict_proba(X_transformed))
+        ml_probs = probs[:, 1]
+        
+        # Anomaly score using cached isolation forest
+        scores = -self._iso_forest.score_samples(X_transformed)
+        iso_scores = (scores - scores.min()) / (scores.max() - scores.min() + 1e-8)
         composites = (1 - iso_weight) * ml_probs + iso_weight * iso_scores
         
         # Output dataframe with all predictions

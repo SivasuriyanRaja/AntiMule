@@ -71,6 +71,15 @@ app.add_middleware(
 )
 
 
+# ── / (Root endpoint) ──────────────────────────────────────────────────────────
+@app.get("/")
+def root():
+    return {
+        "status": "ok", 
+        "message": "AntiMule API is running.", 
+        "docs": "/docs"
+    }
+
 # ── /health ───────────────────────────────────────────────────────────────────
 @app.get("/health")
 def health():
@@ -146,8 +155,11 @@ async def train(file: UploadFile = File(...)):
                 if hasattr(get_detector, '_instance'):
                     delattr(get_detector, '_instance')
                     log_q.put("[INFO] Model cache cleared. Next prediction will load the new model.")
-            except Exception:
-                log_q.put(f"[ERROR] {traceback.format_exc()}")
+            except Exception as e:
+                if isinstance(e, ValueError):
+                    log_q.put(f"[ERROR] {str(e)}")
+                else:
+                    log_q.put(f"[ERROR] {traceback.format_exc()}")
             finally:
                 sys.stdout = old_out
                 done_flag.set()
@@ -206,6 +218,7 @@ async def predict_batch(file: UploadFile = File(...), current_user: dict = Depen
         detector = get_detector()
         results  = detector.predict_batch(df)
 
+        # pyrefly: ignore [unnecessary-type-conversion]
         mule_count = int((results["prediction"] == 1).sum())
         scan_id    = str(uuid.uuid4())
 
@@ -225,6 +238,7 @@ async def predict_batch(file: UploadFile = File(...), current_user: dict = Depen
                 "total":      len(results),
                 "mule_count": mule_count,
                 "mule_pct":   round(100 * mule_count / max(len(results), 1), 2),
+                # pyrefly: ignore [unnecessary-type-conversion]
                 "avg_risk":   round(float(results["risk_score"].mean()), 2),
             },
             "predictions": results.head(200).to_dict(orient="records"),
@@ -290,7 +304,7 @@ async def db_alerts(limit: int = Query(default=20, le=100), current_user: dict =
 @app.get("/model/metrics")
 async def model_metrics():
     """Returns training evaluation metrics from the latest run."""
-    reports_dir = os.path.join(_ROOT, "neon-guard-ui-main", "src", "lib", "reports")
+    reports_dir = "/tmp/reports" if (os.environ.get("VERCEL") and os.path.exists("/tmp/reports/evaluation_metrics.json")) else os.path.join(_ROOT, "neon-guard-ui-main", "src", "lib", "reports")
     metrics_file = os.path.join(reports_dir, "evaluation_metrics.json")
     if not os.path.exists(metrics_file):
         return {"available": False, "reason": "No model trained yet"}
@@ -304,28 +318,44 @@ async def model_metrics():
 @app.get("/model/feature-importance")
 async def model_feature_importance():
     """Returns top feature importances from the latest run."""
-    reports_dir = os.path.join(_ROOT, "neon-guard-ui-main", "src", "lib", "reports")
+    reports_dir = "/tmp/reports" if (os.environ.get("VERCEL") and os.path.exists("/tmp/reports/feature_importances.csv")) else os.path.join(_ROOT, "neon-guard-ui-main", "src", "lib", "reports")
     importances_file = os.path.join(reports_dir, "feature_importances.csv")
     if not os.path.exists(importances_file):
         return {"available": False, "reason": "No model trained yet"}
     try:
         import pandas as pd
         df = pd.read_csv(importances_file, header=None, names=["feature", "importance"])
+        if isinstance(df, pd.Series):
+            df = df.to_frame()
         df = df.dropna(subset=["feature"])
         df = df[df["feature"] != "0"] # just in case
         # Return top 20
-        top_features = df.head(20).to_dict(orient="records")
+        top_features = df.head(20).to_dict(orient="records") # type: ignore
         return {"available": True, "features": top_features}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/model/features")
+async def model_features():
+    """Returns the expected feature columns for the trained model."""
+    artifacts_dir = "/tmp/models" if (os.environ.get("VERCEL") and os.path.exists("/tmp/models/feature_cols.pkl")) else os.path.join(_ROOT, "neon-guard-ui-main", "src", "lib", "models")
+    features_file = os.path.join(artifacts_dir, "feature_cols.pkl")
+    if not os.path.exists(features_file):
+        return {"available": False, "reason": "No model trained yet"}
+    try:
+        import joblib
+        features = joblib.load(features_file)
+        return {"available": True, "features": features}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8005, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8005, reload=False)
 
 # -- Auth Endpoints ------------------------------------------------------------
 import jwt
-import bcrypt
+from passlib.hash import pbkdf2_sha256
 
 from datetime import datetime, timedelta, timezone
 
@@ -349,19 +379,31 @@ class UserLogin(BaseModel):
 async def register(user: UserCreate):
     if not _DB_AVAILABLE:
         raise HTTPException(status_code=500, detail='Database unavailable')
-    pass_hash = bcrypt.hashpw(user.password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    
+    pass_hash = pbkdf2_sha256.hash(user.password)
     try:
         new_user = await _db.async_create_user(user.email, pass_hash, user.name)
         return {'status': 'success', 'user': {'id': new_user['id'], 'email': new_user['email'], 'name': new_user.get('name')}}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @app.post('/auth/login')
 async def login(user: UserLogin):
     if not _DB_AVAILABLE:
         raise HTTPException(status_code=500, detail='Database unavailable')
-    db_user = await _db.async_get_user_by_email(user.email)
-    if not db_user or not bcrypt.checkpw(user.password.encode('utf-8'), db_user['password_hash'].encode('utf-8')):
+    
+    try:
+        db_user = await _db.async_get_user_by_email(user.email)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+    if not db_user or not pbkdf2_sha256.verify(user.password, db_user['password_hash']):
         raise HTTPException(status_code=401, detail='Invalid email or password')
     
     payload = {

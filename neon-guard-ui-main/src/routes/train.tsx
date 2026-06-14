@@ -2,13 +2,14 @@ import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/antimule/AppShell";
 import { Btn, GlassCard, SectionHeader } from "@/components/antimule/primitives";
 import { FileUp, Play, CheckCircle2, XCircle, AlertCircle, Cpu, Loader2 } from "lucide-react";
+import { API_BASE_URL } from "@/lib/utils";
 import React, { useState, useRef, useEffect } from "react";
 
 export const Route = createFileRoute("/train")({
   component: Train,
 });
 
-const API_BASE = "http://localhost:8005";
+const API_BASE = API_BASE_URL;
 
 function formatSize(bytes: number) {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -254,7 +255,7 @@ function Train() {
           <AlertCircle className="h-4 w-4 shrink-0" />
           <span>
             <strong>Backend offline</strong> — make sure the Python server is running on{" "}
-            <code className="font-mono text-xs">localhost:8005</code>. Run{" "}
+            <code className="font-mono text-xs">{API_BASE}</code>. Run{" "}
             <code className="font-mono text-xs">npm run dev</code> from the project root.
           </span>
         </div>
@@ -262,7 +263,7 @@ function Train() {
       {backendOk === true && (
         <div className="mb-4 flex items-center gap-2 rounded-xl border border-success/30 bg-success/5 px-4 py-2.5 text-xs text-success">
           <Cpu className="h-3.5 w-3.5" />
-          Backend connected · <code className="font-mono">localhost:8005</code>
+          Backend connected · <code className="font-mono">{API_BASE}</code>
         </div>
       )}
 

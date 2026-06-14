@@ -20,10 +20,14 @@ import pandas as pd
 import joblib
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import VotingClassifier
+from catboost import CatBoostClassifier
 from sklearn.metrics import (
     classification_report, confusion_matrix, roc_auc_score,
     average_precision_score, f1_score, precision_score, recall_score, roc_curve
 )
+from xgboost import XGBClassifier
+from lightgbm import LGBMClassifier
+from imblearn.over_sampling import SMOTE
 
 sys.path.insert(0, os.path.dirname(__file__))
 from preprocess_optimized import (
@@ -31,122 +35,64 @@ from preprocess_optimized import (
     impute_and_scale, fit_isolation_forest
 )
 
-ARTIFACTS_DIR = os.path.join(os.path.dirname(__file__), '..', 'models')
-REPORTS_DIR = os.path.join(os.path.dirname(__file__), '..', 'reports')
+if os.environ.get("VERCEL"):
+    ARTIFACTS_DIR = "/tmp/models"
+    REPORTS_DIR = "/tmp/reports"
+else:
+    ARTIFACTS_DIR = os.path.join(os.path.dirname(__file__), '..', 'models')
+    REPORTS_DIR = os.path.join(os.path.dirname(__file__), '..', 'reports')
 
 
 def build_models_optimized(class_weight: float = 1.5) -> dict:
     """
     Build models with optimized hyperparameters for minority class.
     class_weight: higher = more weight to positive (mule) class.
-    CatBoost replaces Random Forest — better accuracy on tabular data,
-    native categorical handling, and faster inference.
     """
     pos_weight = class_weight
-    models = {}
-
-    try:
-        from xgboost import XGBClassifier
-        models['xgboost'] = XGBClassifier(
-            n_estimators=500,
-            max_depth=5,
-            learning_rate=0.03,
+    
+    return {
+        'xgboost': XGBClassifier(
+            n_estimators=500,  # Increased from 300
+            max_depth=5,  # Reduced from 6 for better generalization
+            learning_rate=0.03,  # Reduced from 0.05 for stability
             subsample=0.8,
             colsample_bytree=0.8,
             colsample_bylevel=0.8,
-            scale_pos_weight=pos_weight,
+            scale_pos_weight=pos_weight,  # Reintroduced for class imbalance
             min_child_weight=1,
             gamma=0,
-            reg_alpha=0.1,
-            reg_lambda=1.0,
+            reg_alpha=0.1,  # L1 regularization
+            reg_lambda=1.0,  # L2 regularization
             random_state=42,
             n_jobs=-1,
-            eval_metric='aucpr'
-        )
-    except Exception as e:
-        from sklearn.ensemble import GradientBoostingClassifier
-        print(f"[WARN] xgboost unavailable ({e}). Falling back to GradientBoostingClassifier.")
-        models['xgboost'] = GradientBoostingClassifier(
-            n_estimators=200,
-            max_depth=5,
-            learning_rate=0.1,
-            random_state=42
-        )
-
-    try:
-        from lightgbm import LGBMClassifier
-        models['lightgbm'] = LGBMClassifier(
-            n_estimators=500,
-            max_depth=5,
-            learning_rate=0.03,
+            eval_metric='aucpr'  # Optimize for average precision (better for imbalanced)
+        ),
+        'lightgbm': LGBMClassifier(
+            n_estimators=500,  # Increased from 300
+            max_depth=5,  # Reduced from 6
+            learning_rate=0.03,  # Reduced from 0.05
             subsample=0.8,
             colsample_bytree=0.8,
             min_child_samples=5,
             num_leaves=31,
-            scale_pos_weight=pos_weight,
+            scale_pos_weight=pos_weight,  # Class weight
             reg_alpha=0.1,
             reg_lambda=1.0,
             random_state=42,
             n_jobs=-1,
             verbose=-1
-        )
-    except Exception as e:
-        from sklearn.ensemble import RandomForestClassifier
-        print(f"[WARN] lightgbm unavailable ({e}). Falling back to RandomForestClassifier.")
-        models['lightgbm'] = RandomForestClassifier(
-            n_estimators=200,
-            max_depth=10,
-            class_weight='balanced_subsample',
-            random_state=42,
-            n_jobs=-1
-        )
-
-    try:
-        from catboost import CatBoostClassifier
-        models['catboost'] = CatBoostClassifier(
+        ),
+        'catboost': CatBoostClassifier(
             iterations=300,
             depth=6,
             learning_rate=0.03,
-            scale_pos_weight=pos_weight,
+            scale_pos_weight=pos_weight,  # Handles class imbalance
             eval_metric='AUC',
             random_seed=42,
             thread_count=-1,
-            verbose=0
-        )
-    except Exception as e:
-        from sklearn.ensemble import HistGradientBoostingClassifier
-        print(f"[WARN] catboost unavailable ({e}). Falling back to HistGradientBoostingClassifier.")
-        models['catboost'] = HistGradientBoostingClassifier(
-            max_iter=200,
-            max_depth=6,
-            learning_rate=0.03,
-            random_state=42
-        )
-
-    return models
-
-
-def split_dataset(X, y, test_size: float = 0.2, stratify: bool = True, random_state: int = 42) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
-    """
-    Split the feature matrix X and target vector y into train and test sets.
-
-    This ensures the pipeline uses a correct 80/20 split and preserves class proportions when stratification
-    is enabled.
-    """
-    if stratify:
-        return cast(
-            Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series],
-            train_test_split(
-                X, y, test_size=test_size, stratify=y, random_state=random_state
-            )
-        )
-
-    return cast(
-        Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series],
-        train_test_split(
-            X, y, test_size=test_size, random_state=random_state
-        )
-    )
+            verbose=0                    # Silent training
+        ),
+    }
 
 
 def evaluate_model(model, X_test, y_test, name: str, threshold: float = 0.5) -> dict:
@@ -307,12 +253,13 @@ def train_pipeline_optimized(data_path: str):
     with open(os.path.join(REPORTS_DIR, 'evaluation_metrics.json'), 'w') as f:
         json.dump(all_metrics, f, indent=2)
 
-    # Save feature importances
-    feat_imp = pd.Series(
-        trained['xgboost'].feature_importances_,
-        index=X_train_s.columns
-    ).sort_values(ascending=False)
-    feat_imp.to_csv(os.path.join(REPORTS_DIR, 'feature_importances.csv'))
+    # Save feature importances (RandomForest provides this easily)
+    if hasattr(trained['catboost'], 'feature_importances_'):
+        feat_imp = pd.Series(
+            trained['catboost'].feature_importances_,
+            index=X_train_s.columns
+        ).sort_values(ascending=False)
+        feat_imp.to_csv(os.path.join(REPORTS_DIR, 'feature_importances.csv'))
     print(f"  Reports saved → {REPORTS_DIR}/")
 
     print("\n[DONE] Optimized training pipeline complete.\n")

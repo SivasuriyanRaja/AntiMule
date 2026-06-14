@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/antimule/AppShell";
 import { Btn, GlassCard, Pill, SectionHeader } from "@/components/antimule/primitives";
 import { Download, FileUp, Filter, CheckCircle2, XCircle, TableProperties } from "lucide-react";
+import { API_BASE_URL } from "@/lib/utils";
 import React, { useState, useRef } from "react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip, Bar, BarChart, XAxis, YAxis, CartesianGrid } from "recharts";
 
@@ -12,16 +13,6 @@ export const Route = createFileRoute("/batch")({
 function formatSize(bytes: number) {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-}
-
-function hashScore(values: string[], idx: number): number {
-  let h = idx * 31 + 17;
-  for (const v of values) {
-    for (let j = 0; j < v.length && j < 20; j++) {
-      h = ((h * 31) + v.charCodeAt(j)) >>> 0;
-    }
-  }
-  return (h % 100) / 100;
 }
 
 function Batch() {
@@ -51,7 +42,7 @@ function Batch() {
     localStorage.removeItem("batch_fileName"); localStorage.removeItem("batch_fileSize"); localStorage.removeItem("batch_totalEst");
   }
 
-  function processFile(file: File) {
+  async function processFile(file: File) {
     setLoading(true);
     setFileError("");
     setHeaders([]);
@@ -67,33 +58,49 @@ function Batch() {
       return;
     }
 
-    const blob = file.slice(0, 262144); // 256 KB
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const text = String(e.target?.result ?? "");
-        const lines = text.split(/\r?\n/).filter((l) => l.trim());
-        if (lines.length < 2) { setFileError("File must have a header row and at least one data row."); setLoading(false); return; }
-        const hdrs = lines[0].split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
-        const dataLines = lines.slice(1, 201);
-        const avgLen = dataLines.length ? dataLines.reduce((s, l) => s + l.length + 1, 0) / dataLines.length : 60;
-        const est = Math.max(0, Math.round((file.size - lines[0].length) / avgLen));
-        const parsedRows = dataLines.map((line) => line.split(",").map((v) => v.trim().replace(/^"|"$/g, "")));
-        const sc = parsedRows.map((r, i) => hashScore(r, i));
-        // sort by score descending
-        const order = sc.map((s, i) => ({ s, i })).sort((a, b) => b.s - a.s);
-        setHeaders(hdrs);
-        setRows(order.map((o) => parsedRows[o.i]));
-        setScores(order.map((o) => o.s));
-        setTotalEst(est);
-        if (hdrs.length === 0) setFileError("No columns detected. Check the file has a header row.");
-      } catch {
-        setFileError("Could not parse file. Make sure it is a valid CSV.");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch(`${API_BASE_URL}/predict/batch`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
+        },
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || data.status !== "success") {
+        setFileError(data.detail || "Backend error.");
+        setLoading(false);
+        return;
       }
+
+      const preds = data.predictions || [];
+      if (preds.length === 0) {
+        setFileError("No predictions returned by model.");
+        setLoading(false);
+        return;
+      }
+
+      const mlCols = new Set(["ml_probability", "anomaly_score", "composite_probability", "risk_score", "risk_tier", "prediction", "prediction_label", "confidence"]);
+      const hdrs = Object.keys(preds[0]).filter(k => !mlCols.has(k));
+      
+      const newRows = preds.map((p: any) => hdrs.map(h => String(p[h] ?? "")));
+      // Using composite_probability directly for 'scores' (which expects 0-1)
+      const newScores = preds.map((p: any) => Number(p.composite_probability || 0));
+
+      setHeaders(hdrs);
+      setRows(newRows);
+      setScores(newScores);
+      setTotalEst(data.summary?.total || preds.length);
+    } catch (e: any) {
+      setFileError("Failed to read file or connect to backend.");
+    } finally {
       setLoading(false);
-    };
-    reader.onerror = () => { setFileError("Failed to read file."); setLoading(false); };
-    reader.readAsText(blob);
+    }
   }
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -213,7 +220,7 @@ function Batch() {
                   <Pie data={distribution} dataKey="value" nameKey="name" innerRadius={50} outerRadius={82} paddingAngle={2}>
                     {distribution.map((d) => <Cell key={d.name} fill={d.color} stroke="oklch(0.18 0.018 260)" strokeWidth={3} />)}
                   </Pie>
-                  <Tooltip contentStyle={{ background: "oklch(0.22 0.02 260)", border: "1px solid oklch(1 0 0 / 0.08)", borderRadius: 10, fontSize: 12 }} />
+                  <Tooltip contentStyle={{ background: "oklch(0.16 0.028 245)", border: "1px solid oklch(0.28 0.025 245 / 0.70)", borderRadius: 10, fontSize: 12, color: "oklch(0.95 0.008 55)" }} itemStyle={{ color: "oklch(0.95 0.008 55)" }} labelStyle={{ color: "oklch(0.95 0.008 55)" }} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
@@ -235,7 +242,7 @@ function Batch() {
                   <CartesianGrid stroke="oklch(1 0 0 / 0.05)" vertical={false} />
                   <XAxis dataKey="bucket" stroke="oklch(0.7 0.02 260)" fontSize={10} />
                   <YAxis stroke="oklch(0.7 0.02 260)" fontSize={10} />
-                  <Tooltip contentStyle={{ background: "oklch(0.22 0.02 260)", border: "1px solid oklch(1 0 0 / 0.08)", borderRadius: 10, fontSize: 12 }} />
+                  <Tooltip contentStyle={{ background: "oklch(0.16 0.028 245)", border: "1px solid oklch(0.28 0.025 245 / 0.70)", borderRadius: 10, fontSize: 12, color: "oklch(0.95 0.008 55)" }} itemStyle={{ color: "oklch(0.95 0.008 55)" }} labelStyle={{ color: "oklch(0.95 0.008 55)" }} />
                   <Bar dataKey="count" fill="var(--color-primary)" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>

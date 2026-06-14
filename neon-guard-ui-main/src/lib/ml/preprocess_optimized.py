@@ -23,7 +23,6 @@ KEY_FEATURES = [
     'F3889', 'F3891', 'F3894'
 ]
 TARGET           = 'F3924'
-CATEGORICAL_COLS = ['F2230', 'F3886', 'F3888', 'F3889', 'F3890', 'F3891', 'F3892', 'F3893']
 RATIO_PAIRS      = [('F115', 'F321'), ('F527', 'F531'), ('F2082', 'F2122'), ('F2582', 'F2678')]
 
 
@@ -41,13 +40,15 @@ def engineer_features(df: pd.DataFrame):
     df = df.copy()
     label_encoders = {}
 
+    # Auto-detect categorical columns
+    cat_cols = df.select_dtypes(include=['object', 'category', 'bool']).columns.tolist()
+    
     # Vectorized label encoding
-    for col in CATEGORICAL_COLS:
-        if col in df.columns:
-            le = LabelEncoder()
-            df[col] = df[col].astype(str).fillna('UNKNOWN')
-            df[col] = le.fit_transform(df[col])
-            label_encoders[col] = le
+    for col in cat_cols:
+        le = LabelEncoder()
+        df[col] = df[col].astype(str).fillna('UNKNOWN')
+        df[col] = le.fit_transform(df[col])
+        label_encoders[col] = le
 
     # Date parsing (vectorized)
     if 'F3888' in df.columns:
@@ -88,14 +89,51 @@ def select_and_clean_features(df: pd.DataFrame, top_n_variance: int = 150):
     """Optimized feature selection with better handling."""
     df = df.copy()
     
+    target_col = TARGET
+    if target_col not in df.columns:
+        possible_targets = ['F3924', 'target', 'Target', 'Class', 'class', 'label', 'Label', 'is_mule', 'isFraud', 'fraud', 'Fraud', 'prediction', 'Prediction']
+        for pt in possible_targets:
+            if pt in df.columns:
+                target_col = pt
+                break
+                
+        if target_col not in df.columns:
+            raise ValueError(f"Target column missing. A labeled dataset is required for training. Please include one of: {', '.join(possible_targets)}")
+        
     # Drop high-missing columns
     missing_rate = df.isnull().mean()
     high_missing = missing_rate[missing_rate > 0.80].index.tolist()
+    if target_col in high_missing:
+        high_missing.remove(target_col)
     df.drop(columns=high_missing, inplace=True, errors='ignore')
     print(f"[INFO] Dropped {len(high_missing)} columns with >80% missing")
 
-    y = df[TARGET].copy()
-    X = df.drop(columns=[TARGET], errors='ignore')
+    y = df[target_col].copy()
+    
+    # Encode target to 0/1 if it contains strings or booleans
+    if y.dtype == 'object' or y.dtype.name == 'category' or y.dtype == 'bool':
+        val_counts = y.value_counts()
+        if len(val_counts) == 2:
+            majority_class = val_counts.index[0]
+            minority_class = val_counts.index[1]
+            # Common heuristics: if a class contains 'fraud' or 'mule', force it to be 1
+            pos_class = minority_class
+            for cls_val in val_counts.index:
+                if any(k in str(cls_val).lower() for k in ['fraud', 'mule', 'suspicious', 'true', '1']):
+                    pos_class = cls_val
+                    break
+            neg_class = majority_class if pos_class == minority_class else minority_class
+            
+            y = y.map({neg_class: 0, pos_class: 1})
+            print(f"[INFO] Auto-encoded target '{target_col}': {neg_class} -> 0, {pos_class} -> 1")
+        else:
+            # Fallback or single class
+            try:
+                y = pd.to_numeric(y, errors='coerce').fillna(0).astype(int)
+            except:
+                pass
+                
+    X = df.drop(columns=[target_col], errors='ignore')
     X = X.select_dtypes(include=[np.number])
 
     # Feature prioritization
@@ -164,7 +202,9 @@ def transform_new_data(df: pd.DataFrame, artifacts_dir: str = 'models') -> np.nd
     return pd.DataFrame(X_scaled, columns=feature_cols)
 
 
-def fit_isolation_forest(X_train: pd.DataFrame | np.ndarray, artifacts_dir: str = 'models', contamination: float = 0.01):
+from typing import Union
+
+def fit_isolation_forest(X_train: Union[pd.DataFrame, np.ndarray], artifacts_dir: str = 'models', contamination: float = 0.01):
     """Fit Isolation Forest for anomaly detection."""
     os.makedirs(artifacts_dir, exist_ok=True)
     iso_forest = IsolationForest(contamination=contamination, random_state=42, n_jobs=-1)
