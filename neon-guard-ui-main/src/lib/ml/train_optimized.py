@@ -13,19 +13,17 @@ Usage:
 """
 
 import os, sys, json
+from typing import Any, Tuple, cast
+
 import numpy as np
 import pandas as pd
 import joblib
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import VotingClassifier
-from catboost import CatBoostClassifier
 from sklearn.metrics import (
     classification_report, confusion_matrix, roc_auc_score,
     average_precision_score, f1_score, precision_score, recall_score, roc_curve
 )
-from xgboost import XGBClassifier
-from lightgbm import LGBMClassifier
-from imblearn.over_sampling import SMOTE
 
 sys.path.insert(0, os.path.dirname(__file__))
 from preprocess_optimized import (
@@ -44,52 +42,111 @@ def build_models_optimized(class_weight: float = 1.5) -> dict:
     CatBoost replaces Random Forest — better accuracy on tabular data,
     native categorical handling, and faster inference.
     """
-    # Calculate scale_pos_weight for XGBoost and LightGBM
     pos_weight = class_weight
-    
-    return {
-        'xgboost': XGBClassifier(
-            n_estimators=500,  # Increased from 300
-            max_depth=5,  # Reduced from 6 for better generalization
-            learning_rate=0.03,  # Reduced from 0.05 for stability
+    models = {}
+
+    try:
+        from xgboost import XGBClassifier
+        models['xgboost'] = XGBClassifier(
+            n_estimators=500,
+            max_depth=5,
+            learning_rate=0.03,
             subsample=0.8,
             colsample_bytree=0.8,
             colsample_bylevel=0.8,
-            scale_pos_weight=pos_weight,  # Reintroduced for class imbalance
+            scale_pos_weight=pos_weight,
             min_child_weight=1,
             gamma=0,
-            reg_alpha=0.1,  # L1 regularization
-            reg_lambda=1.0,  # L2 regularization
+            reg_alpha=0.1,
+            reg_lambda=1.0,
             random_state=42,
             n_jobs=-1,
-            eval_metric='aucpr'  # Optimize for average precision (better for imbalanced)
-        ),
-        'lightgbm': LGBMClassifier(
-            n_estimators=500,  # Increased from 300
-            max_depth=5,  # Reduced from 6
-            learning_rate=0.03,  # Reduced from 0.05
+            eval_metric='aucpr'
+        )
+    except Exception as e:
+        from sklearn.ensemble import GradientBoostingClassifier
+        print(f"[WARN] xgboost unavailable ({e}). Falling back to GradientBoostingClassifier.")
+        models['xgboost'] = GradientBoostingClassifier(
+            n_estimators=200,
+            max_depth=5,
+            learning_rate=0.1,
+            random_state=42
+        )
+
+    try:
+        from lightgbm import LGBMClassifier
+        models['lightgbm'] = LGBMClassifier(
+            n_estimators=500,
+            max_depth=5,
+            learning_rate=0.03,
             subsample=0.8,
             colsample_bytree=0.8,
             min_child_samples=5,
             num_leaves=31,
-            scale_pos_weight=pos_weight,  # Class weight
+            scale_pos_weight=pos_weight,
             reg_alpha=0.1,
             reg_lambda=1.0,
             random_state=42,
             n_jobs=-1,
             verbose=-1
-        ),
-        'catboost': CatBoostClassifier(
+        )
+    except Exception as e:
+        from sklearn.ensemble import RandomForestClassifier
+        print(f"[WARN] lightgbm unavailable ({e}). Falling back to RandomForestClassifier.")
+        models['lightgbm'] = RandomForestClassifier(
+            n_estimators=200,
+            max_depth=10,
+            class_weight='balanced_subsample',
+            random_state=42,
+            n_jobs=-1
+        )
+
+    try:
+        from catboost import CatBoostClassifier
+        models['catboost'] = CatBoostClassifier(
             iterations=300,
             depth=6,
             learning_rate=0.03,
-            scale_pos_weight=pos_weight,  # Handles class imbalance
+            scale_pos_weight=pos_weight,
             eval_metric='AUC',
             random_seed=42,
             thread_count=-1,
-            verbose=0                    # Silent training
-        ),
-    }
+            verbose=0
+        )
+    except Exception as e:
+        from sklearn.ensemble import HistGradientBoostingClassifier
+        print(f"[WARN] catboost unavailable ({e}). Falling back to HistGradientBoostingClassifier.")
+        models['catboost'] = HistGradientBoostingClassifier(
+            max_iter=200,
+            max_depth=6,
+            learning_rate=0.03,
+            random_state=42
+        )
+
+    return models
+
+
+def split_dataset(X, y, test_size: float = 0.2, stratify: bool = True, random_state: int = 42) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
+    """
+    Split the feature matrix X and target vector y into train and test sets.
+
+    This ensures the pipeline uses a correct 80/20 split and preserves class proportions when stratification
+    is enabled.
+    """
+    if stratify:
+        return cast(
+            Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series],
+            train_test_split(
+                X, y, test_size=test_size, stratify=y, random_state=random_state
+            )
+        )
+
+    return cast(
+        Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series],
+        train_test_split(
+            X, y, test_size=test_size, random_state=random_state
+        )
+    )
 
 
 def evaluate_model(model, X_test, y_test, name: str, threshold: float = 0.5) -> dict:
@@ -109,9 +166,9 @@ def evaluate_model(model, X_test, y_test, name: str, threshold: float = 0.5) -> 
         'threshold': threshold,
         'roc_auc': round(roc_auc_score(y_test, y_proba), 4),
         'avg_precision': round(average_precision_score(y_test, y_proba), 4),
-        'f1_score': round(f1_score(y_test, y_pred, zero_division=0), 4),
-        'precision': round(precision_score(y_test, y_pred, zero_division=0), 4),
-        'recall': round(recall_score(y_test, y_pred, zero_division=0), 4),
+        'f1_score': round(float(f1_score(y_test, y_pred, zero_division=0)), 4),
+        'precision': round(float(precision_score(y_test, y_pred, zero_division=0)), 4),
+        'recall': round(float(recall_score(y_test, y_pred, zero_division=0)), 4),
         'confusion_matrix': confusion_matrix(y_test, y_pred).tolist(),
         'classification_report': classification_report(y_test, y_pred, output_dict=True, zero_division=0),
         'tier_breakdown': {'high': tier_high, 'med': tier_med, 'low': tier_low}
@@ -165,22 +222,31 @@ def train_pipeline_optimized(data_path: str):
     X, y, selected_cols = select_and_clean_features(df_eng, top_n_variance=150)
 
     print("\n[STEP 3] Train/test split (80/20 stratified)...")
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, stratify=y, random_state=42
+    X_train, X_test, y_train, y_test = split_dataset(
+        X, y, test_size=0.2, stratify=True, random_state=42
     )
     print(f"  Train: {X_train.shape}  mules={y_train.sum()} ({100*y_train.sum()/len(y_train):.2f}%)")
     print(f"  Test:  {X_test.shape}   mules={y_test.sum()} ({100*y_test.sum()/len(y_test):.2f}%)")
 
     print("\n[STEP 4] Imputing & scaling...")
-    X_train_s, X_test_s = impute_and_scale(X_train, X_test, artifacts_dir=ARTIFACTS_DIR)
+    X_train_s, X_test_s = cast(
+        Tuple[pd.DataFrame, pd.DataFrame],
+        impute_and_scale(X_train, X_test, artifacts_dir=ARTIFACTS_DIR)
+    )
 
     print("\n[STEP 5] Fitting Isolation Forest (anomaly layer)...")
     fit_isolation_forest(X_train_s, artifacts_dir=ARTIFACTS_DIR, contamination=0.01)
 
     print("\n[STEP 6] SMOTE oversampling...")
-    smote = SMOTE(random_state=42, k_neighbors=3)  # Reduced k_neighbors for small minority
-    X_train_res, y_train_res = smote.fit_resample(X_train_s, y_train)  # type: ignore
-    print(f"  After SMOTE: {dict(pd.Series(y_train_res).value_counts())}")
+    try:
+        from imblearn.over_sampling import SMOTE
+        smote = SMOTE(random_state=42, k_neighbors=3)  # Reduced k_neighbors for small minority
+        X_train_res, y_train_res = smote.fit_resample(X_train_s, y_train)  # type: ignore
+        y_train_res = np.asarray(y_train_res)
+        print(f"  After SMOTE: {dict(pd.Series(y_train_res).value_counts())}")
+    except Exception as e:
+        print(f"[WARN] imblearn unavailable ({e}). Skipping SMOTE and using original training sample.")
+        X_train_res, y_train_res = X_train_s, np.asarray(y_train)
 
     print("\n[STEP 7] Training individual models with optimized params...")
     models = build_models_optimized(class_weight=1.5)
