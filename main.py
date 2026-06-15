@@ -227,7 +227,7 @@ async def predict_batch(file: UploadFile = File(...), current_user: dict = Depen
             try:
                 accounts_list = df.to_dict(orient="records")
                 results_list  = results.to_dict(orient="records")
-                await _db.async_save_batch(scan_id, accounts_list, results_list, source="api") # user_id will be added to batch_scans
+                await _db.async_save_batch(scan_id, accounts_list, results_list, source="api", user_id=current_user.get("sub"))
             except Exception:
                 pass
 

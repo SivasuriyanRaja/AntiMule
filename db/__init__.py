@@ -110,7 +110,7 @@ class _Router:
     def get_stats(self, user_id = None) -> dict:
         if self._mongo:
             try:
-                return self._mongo.sync_get_stats()
+                return self._mongo.sync_get_stats(user_id)
             except Exception:
                 pass
         return {}
