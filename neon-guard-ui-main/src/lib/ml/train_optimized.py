@@ -168,8 +168,8 @@ def train_pipeline_optimized(data_path: str):
     X, y, selected_cols = select_and_clean_features(df_eng, top_n_variance=150)
 
     print("\n[STEP 3] Train/test split (80/20 stratified)...")
-    X_train, X_test, y_train, y_test = split_dataset(
-        X, y, test_size=0.2, stratify=True, random_state=42
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, stratify=y, random_state=42
     )
     print(f"  Train: {X_train.shape}  mules={y_train.sum()} ({100*y_train.sum()/len(y_train):.2f}%)")
     print(f"  Test:  {X_test.shape}   mules={y_test.sum()} ({100*y_test.sum()/len(y_test):.2f}%)")
