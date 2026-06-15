@@ -13,20 +13,20 @@ Usage:
 """
 
 import os, sys, json
+from typing import Any, Tuple, cast
+
 import numpy as np
 import pandas as pd
 import joblib
 from sklearn.model_selection import train_test_split
+from sklearn.ensemble import VotingClassifier
+from catboost import CatBoostClassifier
 from sklearn.metrics import (
     classification_report, confusion_matrix, roc_auc_score,
     average_precision_score, f1_score, precision_score, recall_score, roc_curve
 )
-from sklearn.ensemble import (
-    VotingClassifier,
-    RandomForestClassifier,
-    HistGradientBoostingClassifier,
-    GradientBoostingClassifier
-)
+from xgboost import XGBClassifier
+from lightgbm import LGBMClassifier
 from imblearn.over_sampling import SMOTE
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -49,28 +49,49 @@ def build_models_optimized(class_weight: float = 1.5) -> dict:
     class_weight: higher = more weight to positive (mule) class.
     """
     pos_weight = class_weight
+    
     return {
-        'xgboost': HistGradientBoostingClassifier(
-            max_iter=300,
-            learning_rate=0.03,
-            max_depth=5,
-            l2_regularization=0.1,
-            random_state=42
-        ),
-        'lightgbm': GradientBoostingClassifier(
-            n_estimators=300,
-            learning_rate=0.05,
-            max_depth=5,
+        'xgboost': XGBClassifier(
+            n_estimators=500,  # Increased from 300
+            max_depth=5,  # Reduced from 6 for better generalization
+            learning_rate=0.03,  # Reduced from 0.05 for stability
             subsample=0.8,
-            random_state=42
-        ),
-        'catboost': RandomForestClassifier(
-            n_estimators=300,
-            max_depth=6,
-            class_weight={0: 1, 1: pos_weight},
+            colsample_bytree=0.8,
+            colsample_bylevel=0.8,
+            scale_pos_weight=pos_weight,  # Reintroduced for class imbalance
+            min_child_weight=1,
+            gamma=0,
+            reg_alpha=0.1,  # L1 regularization
+            reg_lambda=1.0,  # L2 regularization
+            random_state=42,
             n_jobs=-1,
-            random_state=42
-        )
+            eval_metric='aucpr'  # Optimize for average precision (better for imbalanced)
+        ),
+        'lightgbm': LGBMClassifier(
+            n_estimators=500,  # Increased from 300
+            max_depth=5,  # Reduced from 6
+            learning_rate=0.03,  # Reduced from 0.05
+            subsample=0.8,
+            colsample_bytree=0.8,
+            min_child_samples=5,
+            num_leaves=31,
+            scale_pos_weight=pos_weight,  # Class weight
+            reg_alpha=0.1,
+            reg_lambda=1.0,
+            random_state=42,
+            n_jobs=-1,
+            verbose=-1
+        ),
+        'catboost': CatBoostClassifier(
+            iterations=300,
+            depth=6,
+            learning_rate=0.03,
+            scale_pos_weight=pos_weight,  # Handles class imbalance
+            eval_metric='AUC',
+            random_seed=42,
+            thread_count=-1,
+            verbose=0                    # Silent training
+        ),
     }
 
 
@@ -91,9 +112,9 @@ def evaluate_model(model, X_test, y_test, name: str, threshold: float = 0.5) -> 
         'threshold': threshold,
         'roc_auc': round(roc_auc_score(y_test, y_proba), 4),
         'avg_precision': round(average_precision_score(y_test, y_proba), 4),
-        'f1_score': round(f1_score(y_test, y_pred, zero_division=0), 4),
-        'precision': round(precision_score(y_test, y_pred, zero_division=0), 4),
-        'recall': round(recall_score(y_test, y_pred, zero_division=0), 4),
+        'f1_score': round(float(f1_score(y_test, y_pred, zero_division=0)), 4),
+        'precision': round(float(precision_score(y_test, y_pred, zero_division=0)), 4),
+        'recall': round(float(recall_score(y_test, y_pred, zero_division=0)), 4),
         'confusion_matrix': confusion_matrix(y_test, y_pred).tolist(),
         'classification_report': classification_report(y_test, y_pred, output_dict=True, zero_division=0),
         'tier_breakdown': {'high': tier_high, 'med': tier_med, 'low': tier_low}
@@ -147,22 +168,31 @@ def train_pipeline_optimized(data_path: str):
     X, y, selected_cols = select_and_clean_features(df_eng, top_n_variance=150)
 
     print("\n[STEP 3] Train/test split (80/20 stratified)...")
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, stratify=y, random_state=42
+    X_train, X_test, y_train, y_test = split_dataset(
+        X, y, test_size=0.2, stratify=True, random_state=42
     )
     print(f"  Train: {X_train.shape}  mules={y_train.sum()} ({100*y_train.sum()/len(y_train):.2f}%)")
     print(f"  Test:  {X_test.shape}   mules={y_test.sum()} ({100*y_test.sum()/len(y_test):.2f}%)")
 
     print("\n[STEP 4] Imputing & scaling...")
-    X_train_s, X_test_s = impute_and_scale(X_train, X_test, artifacts_dir=ARTIFACTS_DIR)
+    X_train_s, X_test_s = cast(
+        Tuple[pd.DataFrame, pd.DataFrame],
+        impute_and_scale(X_train, X_test, artifacts_dir=ARTIFACTS_DIR)
+    )
 
     print("\n[STEP 5] Fitting Isolation Forest (anomaly layer)...")
     fit_isolation_forest(X_train_s, artifacts_dir=ARTIFACTS_DIR, contamination=0.01)
 
     print("\n[STEP 6] SMOTE oversampling...")
-    smote = SMOTE(random_state=42, k_neighbors=3)  # Reduced k_neighbors for small minority
-    X_train_res, y_train_res = smote.fit_resample(X_train_s, y_train)  # type: ignore
-    print(f"  After SMOTE: {dict(pd.Series(y_train_res).value_counts())}")
+    try:
+        from imblearn.over_sampling import SMOTE
+        smote = SMOTE(random_state=42, k_neighbors=3)  # Reduced k_neighbors for small minority
+        X_train_res, y_train_res = smote.fit_resample(X_train_s, y_train)  # type: ignore
+        y_train_res = np.asarray(y_train_res)
+        print(f"  After SMOTE: {dict(pd.Series(y_train_res).value_counts())}")
+    except Exception as e:
+        print(f"[WARN] imblearn unavailable ({e}). Skipping SMOTE and using original training sample.")
+        X_train_res, y_train_res = X_train_s, np.asarray(y_train)
 
     print("\n[STEP 7] Training individual models with optimized params...")
     models = build_models_optimized(class_weight=1.5)
