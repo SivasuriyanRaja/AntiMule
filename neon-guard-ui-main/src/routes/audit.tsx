@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/antimule/AppShell";
 import { Btn, GlassCard, RiskBadge, SectionHeader } from "@/components/antimule/primitives";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   ClipboardList,
   Search,
@@ -15,12 +15,14 @@ import {
   LogOut,
   AlertTriangle,
   CheckCircle2,
+  Upload,
 } from "lucide-react";
 
 export const Route = createFileRoute("/audit")({
   component: AuditLog,
 });
 
+// ── Types ─────────────────────────────────────────────────────────────────────
 type AuditActionType =
   | "login"
   | "logout"
@@ -43,23 +45,7 @@ interface AuditEntry {
   outcome?: "success" | "warning" | "error";
 }
 
-const AUDIT_DATA: AuditEntry[] = [
-  { id: "AU-9041", timestamp: "2026-06-10T07:02:00Z", officer: "You", action: "login", description: "Officer logged in to the compliance portal", outcome: "success" },
-  { id: "AU-9040", timestamp: "2026-06-10T06:58:00Z", officer: "S. Patel", action: "sar_submit", description: "SAR SAR-2024-039 submitted to FinCEN", entity: "SAR-2024-039", outcome: "success" },
-  { id: "AU-9039", timestamp: "2026-06-09T15:32:00Z", officer: "You", action: "case_update", description: "Case C-2036 status changed to Escalated", entity: "C-2036", outcome: "warning" },
-  { id: "AU-9038", timestamp: "2026-06-09T14:11:00Z", officer: "You", action: "score", description: "Account ACC-88421 screened — High Risk (score: 87)", entity: "ACC-88421", riskTier: "high", outcome: "warning" },
-  { id: "AU-9037", timestamp: "2026-06-09T13:55:00Z", officer: "R. Singh", action: "batch", description: "Batch screening run: 142 accounts screened", outcome: "success" },
-  { id: "AU-9036", timestamp: "2026-06-09T12:00:00Z", officer: "S. Patel", action: "case_open", description: "New case C-2040 opened for ACC-77391", entity: "C-2040", outcome: "warning" },
-  { id: "AU-9035", timestamp: "2026-06-09T10:30:00Z", officer: "You", action: "sar_create", description: "SAR draft SAR-2024-040 created for ACC-88421", entity: "SAR-2024-040", outcome: "success" },
-  { id: "AU-9034", timestamp: "2026-06-08T17:45:00Z", officer: "R. Singh", action: "logout", description: "Officer logged out of the compliance portal", outcome: "success" },
-  { id: "AU-9033", timestamp: "2026-06-08T16:20:00Z", officer: "You", action: "score", description: "Account ACC-66102 screened — Medium Risk (score: 61)", entity: "ACC-66102", riskTier: "med", outcome: "success" },
-  { id: "AU-9032", timestamp: "2026-06-08T14:00:00Z", officer: "R. Singh", action: "model_train", description: "CatBoost model retrained on 12,430 records. AUC: 0.9841", outcome: "success" },
-  { id: "AU-9031", timestamp: "2026-06-07T11:15:00Z", officer: "S. Patel", action: "score", description: "Account ACC-44213 screened — Low Risk (score: 22)", entity: "ACC-44213", riskTier: "low", outcome: "success" },
-  { id: "AU-9030", timestamp: "2026-06-07T09:00:00Z", officer: "You", action: "login", description: "Officer logged in to the compliance portal", outcome: "success" },
-  { id: "AU-9029", timestamp: "2026-06-06T16:50:00Z", officer: "You", action: "case_update", description: "Case C-2031 closed — no suspicious activity confirmed", entity: "C-2031", outcome: "success" },
-  { id: "AU-9028", timestamp: "2026-06-06T15:30:00Z", officer: "R. Singh", action: "sar_submit", description: "SAR SAR-2024-041 submitted to FinCEN", entity: "SAR-2024-041", outcome: "success" },
-];
-
+// ── Display maps ──────────────────────────────────────────────────────────────
 const ACTION_ICONS: Record<AuditActionType, React.ElementType> = {
   login: LogIn,
   logout: LogOut,
@@ -104,18 +90,88 @@ const OUTCOME_ICONS = {
 
 const FILTER_ACTIONS = ["All", "Logins", "Screening", "Cases", "SARs", "Model"] as const;
 
+// ── Storage helpers ───────────────────────────────────────────────────────────
+const AUDIT_KEY = "antimule_audit_log";
+const SAR_KEY = "antimule_sar_reports";
+
+function loadAuditLog(): AuditEntry[] {
+  try {
+    const raw = localStorage.getItem(AUDIT_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Derive audit entries from SAR reports stored in localStorage */
+function deriveAuditFromSARs(): AuditEntry[] {
+  try {
+    const sars: any[] = JSON.parse(localStorage.getItem(SAR_KEY) || "[]");
+    const entries: AuditEntry[] = [];
+    sars.forEach((sar, i) => {
+      entries.push({
+        id: `AU-SAR-C-${String(i + 1).padStart(4, "0")}`,
+        timestamp: sar.createdAt,
+        officer: sar.filedBy || "Officer",
+        action: "sar_create",
+        description: `SAR draft ${sar.id} created for ${sar.account}`,
+        entity: sar.id,
+        riskTier: sar.tier,
+        outcome: "success",
+      });
+      if (sar.status === "submitted" && sar.submittedAt) {
+        entries.push({
+          id: `AU-SAR-S-${String(i + 1).padStart(4, "0")}`,
+          timestamp: sar.submittedAt,
+          officer: sar.filedBy || "Officer",
+          action: "sar_submit",
+          description: `SAR ${sar.id} submitted to FinCEN`,
+          entity: sar.id,
+          outcome: "success",
+        });
+      }
+    });
+    return entries;
+  } catch {
+    return [];
+  }
+}
+
+/** Append a new event to the persisted audit log (call from other routes) */
+export function recordAuditEvent(entry: Omit<AuditEntry, "id">) {
+  const log = loadAuditLog();
+  const newId = `AU-${String(Date.now()).slice(-6)}`;
+  localStorage.setItem(AUDIT_KEY, JSON.stringify([{ ...entry, id: newId }, ...log]));
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
 function AuditLog() {
+  const [manualEntries, setManualEntries] = useState<AuditEntry[]>([]);
   const [search, setSearch] = useState("");
   const [actionFilter, setActionFilter] = useState<string>("All");
   const [officerFilter, setOfficerFilter] = useState("All");
 
-  const officers = useMemo(() => {
-    const unique = Array.from(new Set(AUDIT_DATA.map((e) => e.officer)));
-    return ["All", ...unique];
+  useEffect(() => {
+    setManualEntries(loadAuditLog());
   }, []);
 
+  // Merge persisted manual events + events derived from SAR data, newest first
+  const auditData = useMemo<AuditEntry[]>(() => {
+    const sarDerived = deriveAuditFromSARs();
+    const sarIds = new Set(sarDerived.map((e) => e.id));
+    const manual = manualEntries.filter((e) => !sarIds.has(e.id));
+    return [...sarDerived, ...manual].sort(
+      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+  }, [manualEntries]);
+
+  const officers = useMemo(() => {
+    const unique = Array.from(new Set(auditData.map((e) => e.officer)));
+    return ["All", ...unique];
+  }, [auditData]);
+
   const filtered = useMemo(() => {
-    return AUDIT_DATA.filter((entry) => {
+    return auditData.filter((entry) => {
       const matchSearch =
         !search ||
         entry.description.toLowerCase().includes(search.toLowerCase()) ||
@@ -132,12 +188,12 @@ function AuditLog() {
         (actionFilter === "Model" && entry.action === "model_train");
 
       const matchOfficer = officerFilter === "All" || entry.officer === officerFilter;
-
       return matchSearch && matchAction && matchOfficer;
     });
-  }, [search, actionFilter, officerFilter]);
+  }, [auditData, search, actionFilter, officerFilter]);
 
   const handleExport = () => {
+    if (filtered.length === 0) return;
     const csv = [
       ["ID", "Timestamp", "Officer", "Action", "Description", "Entity", "Outcome"].join(","),
       ...filtered.map((e) =>
@@ -145,16 +201,14 @@ function AuditLog() {
           e.id,
           new Date(e.timestamp).toLocaleString(),
           e.officer,
-          ACTION_LABELS[e.action],
+          ACTION_LABELS[e.action] ?? e.action,
           `"${e.description}"`,
           e.entity || "",
           e.outcome || "",
         ].join(",")
       ),
     ].join("\n");
-
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
     const a = document.createElement("a");
     a.href = url;
     a.download = `audit-log-${new Date().toISOString().slice(0, 10)}.csv`;
@@ -169,7 +223,7 @@ function AuditLog() {
         title="System Audit Log"
         subtitle="Complete tamper-evident audit trail of all officer actions. Retained for regulatory compliance and examination."
         actions={
-          <Btn variant="secondary" onClick={handleExport}>
+          <Btn variant="secondary" onClick={handleExport} disabled={auditData.length === 0}>
             <Download className="h-4 w-4" />
             Export CSV
           </Btn>
@@ -179,10 +233,10 @@ function AuditLog() {
       {/* Summary tiles */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
         {[
-          { label: "Total Events", value: AUDIT_DATA.length },
-          { label: "Accounts Screened", value: AUDIT_DATA.filter((e) => e.action === "score" || e.action === "batch").length },
-          { label: "SARs Filed", value: AUDIT_DATA.filter((e) => e.action === "sar_submit").length },
-          { label: "Active Officers", value: new Set(AUDIT_DATA.map((e) => e.officer)).size },
+          { label: "Total Events", value: auditData.length },
+          { label: "Accounts Screened", value: auditData.filter((e) => e.action === "score" || e.action === "batch").length },
+          { label: "SARs Filed", value: auditData.filter((e) => e.action === "sar_submit").length },
+          { label: "Active Officers", value: new Set(auditData.map((e) => e.officer)).size },
         ].map(({ label, value }) => (
           <GlassCard key={label} className="p-4">
             <p className="text-xs text-muted-foreground">{label}</p>
@@ -232,7 +286,7 @@ function AuditLog() {
         </div>
       </GlassCard>
 
-      {/* Audit timeline */}
+      {/* Audit table */}
       <GlassCard className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -250,7 +304,7 @@ function AuditLog() {
             <tbody className="divide-y divide-border/30">
               {filtered.length > 0 ? (
                 filtered.map((entry) => {
-                  const Icon = ACTION_ICONS[entry.action];
+                  const Icon = ACTION_ICONS[entry.action] ?? Brain;
                   return (
                     <tr key={entry.id} className="hover:bg-surface-2/30 transition-colors">
                       <td className="py-3 pl-4 pr-2">
@@ -267,19 +321,17 @@ function AuditLog() {
                       <td className="py-3 px-2">
                         <div className="flex items-center gap-2">
                           <div className="h-6 w-6 rounded-full gradient-gold flex items-center justify-center text-[10px] font-bold text-primary-foreground shrink-0">
-                            {entry.officer === "You"
-                              ? (localStorage.getItem("user_name") || "U")[0].toUpperCase()
-                              : entry.officer[0]}
+                            {(entry.officer === "You"
+                              ? localStorage.getItem("user_name") || "U"
+                              : entry.officer)[0].toUpperCase()}
                           </div>
                           <span className="text-sm">{entry.officer}</span>
                         </div>
                       </td>
                       <td className="py-3 px-2">
-                        <span
-                          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${ACTION_COLORS[entry.action]}`}
-                        >
+                        <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${ACTION_COLORS[entry.action] ?? "bg-surface-2 text-muted-foreground"}`}>
                           <Icon className="h-3 w-3" />
-                          {ACTION_LABELS[entry.action]}
+                          {ACTION_LABELS[entry.action] ?? entry.action}
                         </span>
                       </td>
                       <td className="py-3 px-2 text-sm text-muted-foreground max-w-xs">
@@ -301,8 +353,18 @@ function AuditLog() {
                 })
               ) : (
                 <tr>
-                  <td colSpan={7} className="py-16 text-center text-muted-foreground">
-                    No audit events match your filters.
+                  <td colSpan={7} className="py-16 text-center">
+                    {auditData.length === 0 ? (
+                      <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                        <Upload className="h-8 w-8 opacity-40" />
+                        <p className="text-sm font-medium">No audit events yet</p>
+                        <p className="text-xs max-w-xs">
+                          Events are generated automatically when you create SAR reports, screen accounts, or run batch jobs.
+                        </p>
+                      </div>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">No events match your filters.</span>
+                    )}
                   </td>
                 </tr>
               )}
@@ -311,7 +373,7 @@ function AuditLog() {
         </div>
         <div className="px-4 py-3 border-t border-border/40 flex items-center justify-between">
           <p className="text-xs text-muted-foreground">
-            Showing {filtered.length} of {AUDIT_DATA.length} events
+            Showing {filtered.length} of {auditData.length} events
           </p>
           <p className="text-xs text-muted-foreground">
             Audit log retained for 7 years per BSA requirements

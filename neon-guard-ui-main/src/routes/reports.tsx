@@ -7,7 +7,7 @@ import {
   SectionHeader,
   StatusBadge,
 } from "@/components/antimule/primitives";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   FileText,
   Plus,
@@ -43,40 +43,23 @@ interface SARReport {
   suspiciousActivity: string;
 }
 
-const INITIAL_REPORTS: SARReport[] = [
-  {
-    id: "SAR-2024-041",
-    caseRef: "C-2036",
-    account: "ACC-55892",
-    customerName: "James Morrow",
-    tier: "high",
-    status: "submitted",
-    filedBy: "You",
-    createdAt: "2026-06-03T11:30:00Z",
-    submittedAt: "2026-06-04T09:00:00Z",
-    narrative:
-      "Subject engaged in structured cash deposits consistently below the $10,000 reporting threshold over 6 consecutive business days, totalling approximately $54,000. Pattern consistent with smurfing activity.",
-    transactionAmount: "$54,000",
-    transactionPeriod: "01 Jun – 06 Jun 2026",
-    suspiciousActivity: "Structuring / Smurfing",
-  },
-  {
-    id: "SAR-2024-040",
-    caseRef: "C-2041",
-    account: "ACC-88421",
-    customerName: "Priya Mehta",
-    tier: "high",
-    status: "draft",
-    filedBy: "You",
-    createdAt: "2026-06-08T14:20:00Z",
-    narrative:
-      "Account exhibited 14 outbound wire transfers to 9 different beneficiaries across 5 jurisdictions within 24 hours. Unusual velocity inconsistent with account profile.",
-    transactionAmount: "$31,200",
-    transactionPeriod: "07 Jun – 08 Jun 2026",
-    suspiciousActivity: "Unusual Wire Transfer Pattern",
-  },
-];
+// ── Storage helpers ───────────────────────────────────────────────────────────
+const SAR_KEY = "antimule_sar_reports";
 
+function loadReports(): SARReport[] {
+  try {
+    const raw = localStorage.getItem(SAR_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistReports(reports: SARReport[]) {
+  localStorage.setItem(SAR_KEY, JSON.stringify(reports));
+}
+
+// ── SAR Form Modal ────────────────────────────────────────────────────────────
 function SARFormModal({
   onClose,
   onSubmit,
@@ -95,12 +78,13 @@ function SARFormModal({
     suspiciousActivity: "",
   });
 
-  const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }));
+  const set = (k: keyof typeof form, v: string) =>
+    setForm((f) => ({ ...f, [k]: v }));
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const report: SARReport = {
-      id: `SAR-2024-${Math.floor(Math.random() * 900 + 100)}`,
+      id: `SAR-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 900 + 100))}`,
       caseRef: form.caseRef,
       account: form.account,
       customerName: form.customerName,
@@ -199,6 +183,7 @@ function SARFormModal({
   );
 }
 
+// ── SAR Card ─────────────────────────────────────────────────────────────────
 function SARCard({ report, onSubmit }: { report: SARReport; onSubmit: (id: string) => void }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -272,11 +257,23 @@ function SARCard({ report, onSubmit }: { report: SARReport; onSubmit: (id: strin
   );
 }
 
+// ── Page ──────────────────────────────────────────────────────────────────────
 function Reports() {
-  const [reports, setReports] = useState<SARReport[]>(INITIAL_REPORTS);
+  // All SAR data lives in localStorage — no hardcoded seed data
+  const [reports, setReports] = useState<SARReport[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "draft" | "submitted">("all");
+
+  // Load on mount
+  useEffect(() => {
+    setReports(loadReports());
+  }, []);
+
+  // Persist whenever list changes
+  useEffect(() => {
+    persistReports(reports);
+  }, [reports]);
 
   const filtered = reports.filter((r) => {
     const matchSearch =
@@ -291,13 +288,41 @@ function Reports() {
   const submitReport = (id: string) => {
     setReports((prev) =>
       prev.map((r) =>
-        r.id === id ? { ...r, status: "submitted" as SARStatus, submittedAt: new Date().toISOString() } : r
+        r.id === id
+          ? { ...r, status: "submitted" as SARStatus, submittedAt: new Date().toISOString() }
+          : r
       )
     );
   };
 
+  const handleExportAll = () => {
+    if (reports.length === 0) return;
+    const csv = [
+      ["ID", "Case Ref", "Account", "Subject", "Tier", "Status", "Filed By", "Created", "Submitted", "Activity Type", "Amount", "Period"].join(","),
+      ...reports.map((r) =>
+        [
+          r.id, r.caseRef, r.account, `"${r.customerName}"`, r.tier, r.status,
+          r.filedBy, new Date(r.createdAt).toLocaleDateString("en-GB"),
+          r.submittedAt ? new Date(r.submittedAt).toLocaleDateString("en-GB") : "",
+          `"${r.suspiciousActivity}"`, r.transactionAmount, `"${r.transactionPeriod}"`,
+        ].join(",")
+      ),
+    ].join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `sar-reports-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const drafts = reports.filter((r) => r.status === "draft").length;
   const submitted = reports.filter((r) => r.status === "submitted").length;
+  const thisMonth = reports.filter(
+    (r) =>
+      new Date(r.createdAt).getMonth() === new Date().getMonth() &&
+      new Date(r.createdAt).getFullYear() === new Date().getFullYear()
+  ).length;
 
   return (
     <AppShell>
@@ -314,7 +339,7 @@ function Reports() {
         subtitle="Create, manage, and submit SAR filings to FinCEN. All reports are logged and traceable."
         actions={
           <>
-            <Btn variant="secondary">
+            <Btn variant="secondary" onClick={handleExportAll} disabled={reports.length === 0}>
               <Download className="h-4 w-4" />
               Export All
             </Btn>
@@ -332,7 +357,7 @@ function Reports() {
           { label: "Total SARs", value: reports.length, icon: FileText, color: "text-foreground", bg: "bg-surface-2" },
           { label: "Drafts", value: drafts, icon: AlertTriangle, color: "text-gold", bg: "bg-gold/15" },
           { label: "Submitted", value: submitted, icon: CheckCircle2, color: "text-success", bg: "bg-success/15" },
-          { label: "This Month", value: reports.filter(r => new Date(r.createdAt).getMonth() === new Date().getMonth()).length, icon: Clock, color: "text-primary", bg: "bg-primary/15" },
+          { label: "This Month", value: thisMonth, icon: Clock, color: "text-primary", bg: "bg-primary/15" },
         ].map(({ label, value, icon: Icon, color, bg }) => (
           <GlassCard key={label} className="p-4">
             <div className="flex items-center gap-3">
@@ -388,11 +413,19 @@ function Reports() {
         ) : (
           <GlassCard className="p-12 flex flex-col items-center justify-center text-center gap-3">
             <FileText className="h-10 w-10 text-muted-foreground" />
-            <p className="text-base font-semibold text-muted-foreground">No SAR reports found</p>
-            <p className="text-sm text-muted-foreground">Create your first SAR filing to get started.</p>
-            <Btn variant="gold" onClick={() => setShowModal(true)}>
-              <Plus className="h-4 w-4" /> New SAR
-            </Btn>
+            <p className="text-base font-semibold text-muted-foreground">
+              {reports.length === 0 ? "No SAR reports yet" : "No reports match your filters"}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {reports.length === 0
+                ? "Create your first SAR filing using the button above."
+                : "Try adjusting your search or filter."}
+            </p>
+            {reports.length === 0 && (
+              <Btn variant="gold" onClick={() => setShowModal(true)}>
+                <Plus className="h-4 w-4" /> New SAR
+              </Btn>
+            )}
           </GlassCard>
         )}
       </div>
