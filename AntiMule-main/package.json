@@ -1,0 +1,10 @@
+{
+  "name": "antimule",
+  "private": true,
+  "scripts": {
+    "dev": "npx concurrently -c \"green,blue\" --names \"BACKEND,FRONTEND\" \"npm run backend\" \"npm run frontend\"",
+    "frontend": "cd neon-guard-ui-main && npm run dev",
+    "backend": ".venv\\Scripts\\python.exe main.py",
+    "build": "cd neon-guard-ui-main && npm install && npm run build"
+  }
+}

@@ -1,0 +1,20 @@
+# ML Model Dependencies
+# Optimized requirements for mule detection inference
+
+# Core ML
+pandas>=2.1.0
+numpy>=1.24.0
+scikit-learn>=1.3.0
+xgboost>=1.7.0
+lightgbm>=4.0.0
+catboost>=1.2.0
+imbalanced-learn>=0.11.0
+joblib>=1.3.0
+
+# Optional: For model explainability
+shap>=0.42.0
+
+# Optional: For API endpoint
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.0.0

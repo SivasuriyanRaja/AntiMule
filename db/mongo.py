@@ -1,0 +1,297 @@
+"""
+db/mongo.py  —  AntiMule MongoDB layer
+Collections:
+  predictions   — every scored account (single + batch)
+  batch_scans   — batch scan metadata + summary
+  alerts        — auto-generated high-risk alerts
+  model_metrics — training metrics history
+
+Motor  -> async (FastAPI endpoints)
+PyMongo -> sync  (scripts, health checks)
+"""
+
+import os
+from datetime import datetime, timezone
+from typing import Optional, Any
+from dotenv import load_dotenv
+
+load_dotenv()
+
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
+MONGO_DB  = os.getenv("MONGO_DB",  "antimule")
+
+# ── Async client (FastAPI / motor) ────────────────────────────────────────────
+try:
+    from motor.motor_asyncio import AsyncIOMotorClient
+    _async_client: Optional[AsyncIOMotorClient] = None
+
+    def get_async_db() -> Any:
+        global _async_client
+        if _async_client is None:
+            _async_client = AsyncIOMotorClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+        return _async_client[MONGO_DB]
+except ImportError:
+    def get_async_db() -> Any:
+        raise ImportError("motor is not installed")
+
+# ── Sync client (scripts / health checks) ────────────────────────────────────
+try:
+    from pymongo import MongoClient, DESCENDING
+    _sync_client: Optional[MongoClient] = None
+
+    def get_sync_db() -> Any:
+        global _sync_client
+        if _sync_client is None:
+            _sync_client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=3000)
+        return _sync_client[MONGO_DB]
+
+    def ping() -> bool:
+        try:
+            get_sync_db().command("ping")
+            return True
+        except Exception:
+            return False
+
+except ImportError:
+    DESCENDING = -1
+    def get_sync_db() -> Any:
+        raise ImportError("pymongo is not installed")
+    def ping() -> bool:
+        return False
+
+
+# ── Document builders ─────────────────────────────────────────────────────────
+def _pred_doc(account_data: dict, result: dict, source: str = "api", user_id: Optional[str] = None) -> dict:
+    doc = {
+        "account_data":         account_data,
+        "ml_probability":       result.get("ml_probability"),
+        "anomaly_score":        result.get("anomaly_score"),
+        "composite_probability":result.get("composite_probability"),
+        "risk_score":           result.get("risk_score"),
+        "risk_tier":            result.get("risk_tier"),
+        "prediction":           result.get("prediction"),
+        "prediction_label":     result.get("prediction_label"),
+        "confidence":           result.get("confidence"),
+        "alerts":               result.get("alerts", []),
+        "source":               source,
+        "created_at":           datetime.now(timezone.utc),
+    }
+    if user_id: doc["user_id"] = user_id
+    return doc
+
+
+def _batch_doc(scan_id: str, results: list, source: str = "api", user_id: Optional[str] = None) -> dict:
+    mule_count = sum(1 for r in results if r.get("prediction") == 1)
+    tiers = {}
+    for r in results:
+        t = r.get("risk_tier", "UNKNOWN")
+        tiers[t] = tiers.get(t, 0) + 1
+    avg_risk = round(sum(r.get("risk_score", 0) for r in results) / max(len(results), 1), 2)
+    doc = {
+        "scan_id":        scan_id,
+        "total":          len(results),
+        "mule_count":     mule_count,
+        "legit_count":    len(results) - mule_count,
+        "mule_pct":       round(100 * mule_count / max(len(results), 1), 2),
+        "avg_risk_score": avg_risk,
+        "tier_breakdown": tiers,
+        "source":         source,
+        "created_at":     datetime.now(timezone.utc),
+    }
+    if user_id: doc["user_id"] = user_id
+    return doc
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ASYNC  (FastAPI)
+# ═══════════════════════════════════════════════════════════════════
+
+async def async_save_prediction(account_data: dict, result: dict,
+                                source: str = "api", user_id: Optional[str] = None) -> str:
+    db  = get_async_db()
+    doc = _pred_doc(account_data, result, source, user_id)
+    res = await db.predictions.insert_one(doc)
+    # Auto-alert for CRITICAL / HIGH risk
+    if result.get("risk_tier") in ("CRITICAL", "HIGH"):
+        alert_doc = {
+            "prediction_id":  str(res.inserted_id),
+            "risk_score":     result.get("risk_score"),
+            "risk_tier":      result.get("risk_tier"),
+            "ml_probability": result.get("ml_probability"),
+            "alert_reason":   (result.get("alerts") or ["High risk detected"])[0],
+            "acknowledged":   False,
+            "created_at":     datetime.now(timezone.utc),
+        }
+        if user_id: alert_doc["user_id"] = user_id
+        await db.alerts.insert_one(alert_doc)
+    return str(res.inserted_id)
+
+
+async def async_save_batch(scan_id: str, accounts: list,
+                           results: list, source: str = "api", user_id: Optional[str] = None) -> str:
+    db  = get_async_db()
+    doc = _batch_doc(scan_id, results, source, user_id)
+    res = await db.batch_scans.insert_one(doc)
+    # Bulk insert individual predictions
+    docs = [_pred_doc(a, r, "batch", user_id) for a, r in zip(accounts, results)]
+    if docs:
+        await db.predictions.insert_many(docs)
+    return str(res.inserted_id)
+
+
+async def async_get_recent(limit: int = 50, user_id: Optional[str] = None) -> list:
+    db     = get_async_db()
+    query  = {"user_id": user_id} if user_id else {}
+    cursor = db.predictions.find(
+        query, {"_id": 0, "account_data": 0}
+    ).sort("created_at", -1).limit(limit)
+    return await cursor.to_list(length=limit)
+
+
+async def async_get_stats(user_id: Optional[str] = None) -> dict:
+    db       = get_async_db()
+    query    = {"user_id": user_id} if user_id else {}
+    total    = await db.predictions.count_documents(query)
+    mules    = await db.predictions.count_documents({**query, "prediction": 1})
+    
+    alert_query: dict[str, Any] = {"acknowledged": False}
+    if user_id: alert_query["user_id"] = user_id
+    alerts   = await db.alerts.count_documents(alert_query)
+    
+    match_stage = {"$match": query} if query else None
+    pipeline: list[dict[str, Any]] = [{"$group": {"_id": "$risk_tier", "count": {"$sum": 1}}}]
+    if match_stage:
+        pipeline.insert(0, match_stage)
+        
+    tier_agg = await db.predictions.aggregate(pipeline).to_list(length=10)
+    return {
+        "total_scored":  total,
+        "mule_count":    mules,
+        "legit_count":   total - mules,
+        "open_alerts":   alerts,
+        "tier_breakdown": {d["_id"]: d["count"] for d in tier_agg if d["_id"]},
+    }
+
+
+async def async_get_alerts(limit: int = 20, user_id: Optional[str] = None) -> list:
+    db     = get_async_db()
+    query: dict[str, Any] = {"acknowledged": False}
+    if user_id: query["user_id"] = user_id
+    cursor = db.alerts.find(
+        query, {"_id": 0}
+    ).sort("created_at", -1).limit(limit)
+    return await cursor.to_list(length=limit)
+
+
+async def async_save_model_metrics(metrics: list) -> str:
+    db  = get_async_db()
+    doc = {"metrics": metrics, "created_at": datetime.now(timezone.utc)}
+    res = await db.model_metrics.insert_one(doc)
+    return str(res.inserted_id)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# SYNC  (scripts / startup checks)
+# ═══════════════════════════════════════════════════════════════════
+
+def sync_save_prediction(account_data: dict, result: dict,
+                         source: str = "api", user_id: Optional[str] = None) -> str:
+    db  = get_sync_db()
+    doc = _pred_doc(account_data, result, source, user_id)
+    res = db.predictions.insert_one(doc)
+    if result.get("risk_tier") in ("CRITICAL", "HIGH"):
+        alert_doc = {
+            "prediction_id":  str(res.inserted_id),
+            "risk_score":     result.get("risk_score"),
+            "risk_tier":      result.get("risk_tier"),
+            "alert_reason":   (result.get("alerts") or ["High risk detected"])[0],
+            "acknowledged":   False,
+            "created_at":     datetime.now(timezone.utc),
+        }
+        if user_id: alert_doc["user_id"] = user_id
+        db.alerts.insert_one(alert_doc)
+    return str(res.inserted_id)
+
+
+def sync_get_recent(limit: int = 50, user_id: Optional[str] = None) -> list:
+    db = get_sync_db()
+    query  = {"user_id": user_id} if user_id else {}
+    return list(
+        db.predictions.find(
+            query, {"_id": 0, "account_data": 0}
+        ).sort("created_at", DESCENDING).limit(limit)
+    )
+
+
+def sync_get_stats(user_id: Optional[str] = None) -> dict:
+    db     = get_sync_db()
+    query  = {"user_id": user_id} if user_id else {}
+    total  = db.predictions.count_documents(query)
+    mules  = db.predictions.count_documents({**query, "prediction": 1})
+    
+    alert_query: dict[str, Any] = {"acknowledged": False}
+    if user_id: alert_query["user_id"] = user_id
+    alerts = db.alerts.count_documents(alert_query)
+    
+    match_stage = {"$match": query} if query else None
+    pipeline: list[dict[str, Any]] = [{"$group": {"_id": "$risk_tier", "count": {"$sum": 1}}}]
+    if match_stage:
+        pipeline.insert(0, match_stage)
+        
+    tiers  = db.predictions.aggregate(pipeline)
+    return {
+        "total_scored":   total,
+        "mule_count":     mules,
+        "legit_count":    total - mules,
+        "open_alerts":   alerts,
+        "tier_breakdown": {d["_id"]: d["count"] for d in tiers if d["_id"]},
+    }
+
+
+def ensure_indexes():
+    """Create indexes once at startup."""
+    db = get_sync_db()
+    db.predictions.create_index([("created_at", DESCENDING)])
+    db.predictions.create_index([("prediction", 1)])
+    db.predictions.create_index([("risk_tier", 1)])
+    db.predictions.create_index([("risk_score", DESCENDING)])
+    db.alerts.create_index([("acknowledged", 1)])
+    db.alerts.create_index([("created_at", DESCENDING)])
+    db.batch_scans.create_index([("scan_id", 1)], unique=True)
+    db.batch_scans.create_index([("created_at", DESCENDING)])
+    print("[MongoDB] Indexes created.")
+
+async def async_create_user(email: str, password_hash: str, name: Optional[str] = None) -> dict:
+    db = get_async_db()
+    doc = {'email': email, 'password_hash': password_hash, 'name': name, 'created_at': datetime.now(timezone.utc).isoformat()}
+    try:
+        res = await db.users.insert_one(doc)
+        doc['id'] = str(res.inserted_id)
+        return doc
+    except Exception as e:
+        raise ValueError(f'User with email {email} already exists or db error: {e}')
+
+async def async_get_user_by_email(email: str) -> Optional[dict]:
+    db = get_async_db()
+    doc = await db.users.find_one({'email': email})
+    if doc:
+        doc['id'] = str(doc.pop('_id'))
+    return doc
+
+def create_user(email: str, password_hash: str, name: Optional[str] = None) -> dict:
+    db = get_sync_db()
+    doc = {'email': email, 'password_hash': password_hash, 'name': name, 'created_at': datetime.now(timezone.utc).isoformat()}
+    try:
+        res = db.users.insert_one(doc)
+        doc['id'] = str(res.inserted_id)
+        return doc
+    except Exception as e:
+        raise ValueError(f'User with email {email} already exists or db error: {e}')
+
+def get_user_by_email(email: str) -> Optional[dict]:
+    db = get_sync_db()
+    doc = db.users.find_one({'email': email})
+    if doc:
+        doc['id'] = str(doc.pop('_id'))
+    return doc
+
