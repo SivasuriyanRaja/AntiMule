@@ -59,19 +59,8 @@ interface ModelMetrics {
   tier_breakdown?: { high: number; med: number; low: number };
 }
 
-// Mock compliance deadlines and workload data (banking-specific)
-const COMPLIANCE_DEADLINES = [
-  { label: "Monthly SAR filing", due: "15 Jun 2026", daysLeft: 5, urgent: true },
-  { label: "Quarter-end review", due: "30 Jun 2026", daysLeft: 20, urgent: false },
-  { label: "Annual AML audit", due: "31 Aug 2026", daysLeft: 82, urgent: false },
-];
-
-const MY_CASES = [
-  { id: "C-2041", account: "ACC-88421", tier: "high" as const, status: "Open", age: "2d" },
-  { id: "C-2038", account: "ACC-77391", tier: "med" as const, status: "Under Review", age: "5d" },
-  { id: "C-2035", account: "ACC-66102", tier: "high" as const, status: "Escalated", age: "7d" },
-];
-
+const COMPLIANCE_DEADLINES: any[] = [];
+const MY_CASES: any[] = [];
 function Overview() {
   const [features, setFeatures] = useState<FeatureImportance[]>([]);
   const [bestModel, setBestModel] = useState<ModelMetrics | null>(null);
@@ -90,15 +79,7 @@ function Overview() {
     { name: "High Risk", value: tierBreakdown.high || 0, color: "var(--color-critical)" },
   ].filter((d) => d.value > 0);
 
-  const barData = [
-    { name: "Mon", screened: 14, flagged: 2 },
-    { name: "Tue", screened: 22, flagged: 4 },
-    { name: "Wed", screened: 18, flagged: 3 },
-    { name: "Thu", screened: 31, flagged: 6 },
-    { name: "Fri", screened: 27, flagged: 5 },
-    { name: "Sat", screened: 8, flagged: 1 },
-    { name: "Today", screened: stats?.total_scored || 0, flagged: stats?.open_alerts || 0 },
-  ];
+  const barData = [];
 
   useEffect(() => {
     const token = localStorage.getItem("auth_token");
@@ -303,27 +284,44 @@ function Overview() {
             </Link>
           </div>
           <div className="space-y-2">
-            {MY_CASES.map((c) => (
-              <div
-                key={c.id}
-                className="flex items-center justify-between p-3 rounded-lg bg-surface-2/40 border border-border/40 hover:bg-surface-2/60 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <div className={`h-2 w-2 rounded-full shrink-0 ${
-                    c.tier === "high" ? "bg-critical" : c.tier === "med" ? "bg-gold" : "bg-success"
-                  }`} />
-                  <div>
-                    <p className="text-sm font-medium">{c.id}</p>
-                    <p className="text-xs text-muted-foreground">{c.account}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <RiskBadge tier={c.tier} />
-                  <p className="text-[10px] text-muted-foreground mt-1">{c.age} old</p>
-                </div>
-              </div>
-            ))}
+  {MY_CASES.length > 0 ? (
+    MY_CASES.map((c) => (
+      <div
+        key={c.id}
+        className="flex items-center justify-between p-3 rounded-lg bg-surface-2/40 border border-border/40 hover:bg-surface-2/60 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <div
+            className={`h-2 w-2 rounded-full shrink-0 ${
+              c.tier === "high"
+                ? "bg-critical"
+                : c.tier === "med"
+                ? "bg-gold"
+                : "bg-success"
+            }`}
+          />
+          <div>
+            <p className="text-sm font-medium">{c.id}</p>
+            <p className="text-xs text-muted-foreground">{c.account}</p>
           </div>
+        </div>
+        <div className="text-right">
+          <RiskBadge tier={c.tier} />
+          <p className="text-[10px] text-muted-foreground mt-1">
+            {c.age} old
+          </p>
+        </div>
+      </div>
+    ))
+  ) : (
+    <div className="text-center py-6">
+      <p className="text-sm text-muted-foreground">
+        No open cases available
+      </p>
+    </div>
+  )}
+</div>
+            
         </GlassCard>
 
         {/* Compliance deadlines */}
@@ -333,30 +331,39 @@ function Overview() {
             <h2 className="font-display text-base font-semibold">Compliance Deadlines</h2>
           </div>
           <div className="space-y-3">
-            {COMPLIANCE_DEADLINES.map((d) => (
-              <div key={d.label} className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-2.5 flex-1">
-                  {d.urgent ? (
-                    <AlertTriangle className="h-4 w-4 text-critical shrink-0 mt-0.5" />
-                  ) : (
-                    <CheckCircle2 className="h-4 w-4 text-success shrink-0 mt-0.5" />
-                  )}
-                  <div>
-                    <p className="text-sm font-medium">{d.label}</p>
-                    <p className="text-xs text-muted-foreground">{d.due}</p>
-                  </div>
-                </div>
-                <span
-                  className={`badge-sm font-semibold shrink-0 ${
-                    d.urgent
-                      ? "bg-critical/15 text-critical border border-critical/30"
-                      : "bg-success/15 text-success border border-success/30"
-                  }`}
-                >
-                  {d.daysLeft}d
-                </span>
-              </div>
-            ))}
+  {COMPLIANCE_DEADLINES.length > 0 ? (
+    COMPLIANCE_DEADLINES.map((d) => (
+      <div key={d.label} className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-2.5 flex-1">
+          {d.urgent ? (
+            <AlertTriangle className="h-4 w-4 text-critical shrink-0 mt-0.5" />
+          ) : (
+            <CheckCircle2 className="h-4 w-4 text-success shrink-0 mt-0.5" />
+          )}
+          <div>
+            <p className="text-sm font-medium">{d.label}</p>
+            <p className="text-xs text-muted-foreground">{d.due}</p>
+          </div>
+        </div>
+        <span
+          className={`badge-sm font-semibold shrink-0 ${
+            d.urgent
+              ? "bg-critical/15 text-critical border border-critical/30"
+              : "bg-success/15 text-success border border-success/30"
+          }`}
+        >
+          {d.daysLeft}d
+        </span>
+      </div>
+    ))
+  ) : (
+    <div className="text-center py-6">
+      <p className="text-sm text-muted-foreground">
+        No compliance deadlines available
+      </p>
+    </div>
+  )}
+</div>
           </div>
           <hr className="divider-gold my-4" />
           <Link to="/reports">
